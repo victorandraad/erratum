@@ -104,6 +104,15 @@ class DiffDoDev:
     def producao(self):
         return [f for f in self.arquivos() if not _TEST_FILE_RX.search(f)]
 
+    def pendentes(self):
+        """Linhas de `git status --porcelain --untracked-files=no`: alteração rastreada no
+        worktree ou no índice. Arquivo não rastreado não conta."""
+        out = self.sh(
+            ["git", "status", "--porcelain", "--untracked-files=no"],
+            cwd=str(self.worktree),
+        ).stdout or ""
+        return [linha for linha in out.splitlines() if linha.strip()]
+
     def existe_na_base(self, rel):
         return self.sh(["git", "cat-file", "-e", f"{self.diff_ref}:{rel}"],
                        cwd=str(self.worktree)).returncode == 0
@@ -185,6 +194,7 @@ class PortaoFixNoop(Portao):
     captura: APROVOU. Restaura a produção no finally em sucesso, no-op E exceção.
 
     Sem comando de teste configurado: PULOU com motivo (não há como provar nada).
+    Alteração rastreada pendente no worktree ou no índice: PULOU sem tocar em arquivo nem rodar teste.
     # ponytail: em projeto Python, use `python -B ...` no comando: o portão troca o fonte e destroca
     # em menos de um segundo, e um `.pyc` gravado no meio pode sobreviver com o mesmo mtime+tamanho."""
 
@@ -199,6 +209,11 @@ class PortaoFixNoop(Portao):
         # Nada a provar: sem teste (não há o que falhar) OU sem produção (nada pra reverter).
         if not testes or not prod:
             return _pulou("diff sem par produção+teste")
+        pendentes = self.diff.pendentes()
+        if pendentes:
+            return _pulou(
+                "alteracao rastreada pendente no worktree "
+                f"({len(pendentes)} arquivo(s)): commite ou guarde antes")
         sh, wt = self.diff.sh, str(self.diff.worktree)
         orig_sha = (sh(["git", "rev-parse", "HEAD"], cwd=wt).stdout or "").strip()
         resultado = _pulou("exceção")
@@ -544,6 +559,15 @@ class PortaoStubNeutro(Portao):
         return any(not (_TEST_FILE_RX.search(o) or _STUB_SKIP_PATH_RX.search(o)) for o in outras)
 
 
+def _voltar_ao_head(sh, wt, arquivos):
+    """Índice e worktree dos arquivos voltam ao HEAD. Depois de `git add`,
+    `git checkout --` restaura do índice, não do HEAD."""
+    if not arquivos:
+        return
+    sh(["git", "reset", "-q", "HEAD", "--", *arquivos], cwd=wt)
+    sh(["git", "checkout", "HEAD", "--", *arquivos], cwd=wt)
+
+
 # ── Portão de travessão ───────────────────────────────────────────────────────
 def corrigir_travessao(texto):
     """Troca SÓ o travessão de prosa (colado a letra/dígito ou a espaço de algum lado) por vírgula,
@@ -583,7 +607,8 @@ class PortaoEmDash(Portao):
     Diff com arquivo de teste mas sem comando de teste configurado: PULOU sem tocar em nada (não dá
     pra confirmar que a troca é inofensiva). Diff sem teste nenhum: corrige e commita direto.
 
-    É o único portão que COMMITA no repositório: `corrigiu` no extra diz se houve commit."""
+    É o único portão que COMMITA no repositório: `corrigiu` no extra diz se houve commit.
+    Com correção a fazer e alteração rastreada pendente: PULOU sem tocar. git add ou git commit que falha: desfaz (índice e arquivo voltam ao HEAD) e PULOU."""
 
     nome = "em-dash"
 
@@ -601,6 +626,13 @@ class PortaoEmDash(Portao):
                 correcoes[rel] = corrigido
         if not correcoes:
             return Resultado(APROVOU, detalhe="nenhum travessão de prosa", corrigiu=False)
+        pendentes = self.diff.pendentes()
+        if pendentes:
+            return Resultado(
+                PULOU,
+                detalhe=("alteracao rastreada pendente no worktree "
+                         f"({len(pendentes)} arquivo(s)): commite ou guarde antes"),
+                corrigiu=False)
         testes = self.diff.testes()
         if testes and not self.comandos_de_teste:
             return Resultado(PULOU, detalhe=f"travessão de prosa em {len(correcoes)} arquivo(s), "
@@ -615,14 +647,23 @@ class PortaoEmDash(Portao):
                     REPROVOU,
                     motivo="Testes do escopo falham depois de trocar o travessão por vírgula",
                     corrigiu=True)
-            sh(["git", "add", "--", *tocados], cwd=wt)
-            sh(["git", "commit", "-q", "-m", "Troca travessao por virgula"], cwd=wt)
+            add = sh(["git", "add", "--", *tocados], cwd=wt)
+            if add.returncode != 0:
+                _voltar_ao_head(sh, wt, tocados)
+                return Resultado(PULOU, detalhe=f"git add falhou: {(add.stderr or '').strip()}",
+                                 corrigiu=False)
+            commit = sh(["git", "commit", "-q", "-m", "Troca travessao por virgula"], cwd=wt)
+            if commit.returncode != 0:
+                _voltar_ao_head(sh, wt, tocados)
+                return Resultado(
+                    PULOU, detalhe=f"git commit falhou: {(commit.stderr or '').strip()}",
+                    corrigiu=False)
             return Resultado(APROVOU, detalhe=f"corrigido em {len(tocados)} arquivo(s)",
                              corrigiu=True)
         except Exception as exc:  # noqa: BLE001: portão não pode derrubar o chamador
             self.log(f"{self.nome}: {exc}")
-            sh(["git", "checkout", "--", *tocados], cwd=wt)
-            return Resultado(APROVOU, detalhe=str(exc), corrigiu=False)
+            _voltar_ao_head(sh, wt, tocados)
+            return Resultado(PULOU, detalhe=str(exc), corrigiu=False)
 
 
 # Nome de CLI -> classe, na ordem em que faz sentido rodar (o em-dash commita, então vai primeiro).

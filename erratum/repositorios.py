@@ -317,6 +317,7 @@ class RepositorioDePortoes:
             """
             + where
             + " GROUP BY gate"
+            + " ORDER BY reprovou DESC, gate ASC"
         )
         linhas = self._banco.consultar(sql, tuple(params))
         return [self._taxa_de_linha(l) for l in linhas]
