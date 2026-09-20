@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from dataclasses import replace
 
 from erratum.dominio import Acerto, Correcao, Erro, Padrao, TaxaDePortao, VereditoDePortao
@@ -11,47 +12,59 @@ class RepositorioDeErros:
         self._banco = banco
 
     def inserir(self, erro, chave_importacao=None):
+        gravado, _inserido = self.inserir_se_novo(erro, chave_importacao)
+        return gravado
+
+    def inserir_se_novo(self, erro, chave_importacao=None):
         if chave_importacao:
             existente = self._por_chave(chave_importacao)
             if existente is not None:
-                return existente
+                return existente, False
         contexto_json = json.dumps(erro.contexto or {}, ensure_ascii=False)
-        with self._banco.transacao() as con:
-            if chave_importacao:
-                linha = con.execute(
-                    "SELECT * FROM errors WHERE import_key = ?",
-                    (chave_importacao,),
-                ).fetchone()
-                if linha is not None:
-                    return self._de_linha(linha)
-            cur = con.execute(
-                """
-                INSERT INTO errors(
-                    ts, project, kind, stage, tool, signature, text,
-                    context_json, import_key
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    erro.ts,
-                    erro.projeto,
-                    erro.tipo,
-                    erro.etapa,
-                    erro.ferramenta,
-                    erro.assinatura,
-                    erro.texto,
-                    contexto_json,
-                    chave_importacao,
-                ),
-            )
-            novo_id = cur.lastrowid
-            con.execute(
-                """
-                INSERT INTO ledger_fts(signature, text, note, src)
-                VALUES (?, ?, ?, ?)
-                """,
-                (erro.assinatura, erro.texto, "", "error:%d" % novo_id),
-            )
-        return replace(erro, id=novo_id)
+        try:
+            with self._banco.transacao() as con:
+                if chave_importacao:
+                    linha = con.execute(
+                        "SELECT * FROM errors WHERE import_key = ?",
+                        (chave_importacao,),
+                    ).fetchone()
+                    if linha is not None:
+                        return self._de_linha(linha), False
+                cur = con.execute(
+                    """
+                    INSERT INTO errors(
+                        ts, project, kind, stage, tool, signature, text,
+                        context_json, import_key
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        erro.ts,
+                        erro.projeto,
+                        erro.tipo,
+                        erro.etapa,
+                        erro.ferramenta,
+                        erro.assinatura,
+                        erro.texto,
+                        contexto_json,
+                        chave_importacao,
+                    ),
+                )
+                novo_id = cur.lastrowid
+                con.execute(
+                    """
+                    INSERT INTO ledger_fts(signature, text, note, src)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    (erro.assinatura, erro.texto, "", "error:%d" % novo_id),
+                )
+            return replace(erro, id=novo_id), True
+        except sqlite3.IntegrityError:
+            if not chave_importacao:
+                raise
+            existente = self._por_chave(chave_importacao)
+            if existente is None:
+                raise
+            return existente, False
 
     def por_id(self, id_erro):
         linhas = self._banco.consultar(

@@ -62,11 +62,38 @@ class Ledger:
         ferramenta="",
         contexto=None,
         chave_importacao=None,
+        ts=None,
+        com_pistas=True,
     ):
-        pistas = [a for a in self.buscar(texto) if a.correcoes]
-        erro = Erro(
+        pistas = []
+        if com_pistas:
+            pistas = [a for a in self.buscar(texto) if a.correcoes]
+        erro = self._montar_erro(
+            texto, projeto, tipo, etapa, ferramenta, contexto, ts
+        )
+        gravado = self._erros.inserir(erro, chave_importacao=chave_importacao)
+        return gravado, pistas
+
+    def registrar_erro_importado(
+        self,
+        texto,
+        projeto,
+        tipo="error",
+        etapa="",
+        ferramenta="",
+        contexto=None,
+        chave_importacao=None,
+        ts=None,
+    ):
+        erro = self._montar_erro(
+            texto, projeto, tipo, etapa, ferramenta, contexto, ts
+        )
+        return self._erros.inserir_se_novo(erro, chave_importacao=chave_importacao)
+
+    def _montar_erro(self, texto, projeto, tipo, etapa, ferramenta, contexto, ts):
+        return Erro(
             id=0,
-            ts=self._ts(),
+            ts=self._ts() if ts is None else ts,
             projeto=projeto,
             tipo=tipo,
             etapa=etapa,
@@ -75,8 +102,6 @@ class Ledger:
             texto=texto,
             contexto=dict(contexto) if contexto else {},
         )
-        gravado = self._erros.inserir(erro, chave_importacao=chave_importacao)
-        return gravado, pistas
 
     def erro(self, id_erro):
         return self._erros.por_id(id_erro)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import subprocess
 import sys
@@ -10,6 +11,7 @@ from pathlib import Path
 
 from erratum.banco import Banco
 from erratum.ledger import ErroNaoEncontrado, Ledger
+from erratum.mineracao import ImportadorJsonl, MineradorDeStream
 from erratum.portoes import PORTOES, DiffDoDev
 
 
@@ -304,6 +306,114 @@ class ComandoFind(Comando):
         return 0
 
 
+def _sha256(texto):
+    return hashlib.sha256(texto.encode("utf-8")).hexdigest()
+
+
+def _ler_dicts_jsonl(caminho):
+    eventos = []
+    with open(caminho, encoding="utf-8") as fh:
+        for linha in fh:
+            bruto = linha.strip()
+            if not bruto:
+                continue
+            try:
+                dado = json.loads(bruto)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(dado, dict):
+                eventos.append(dado)
+    return eventos
+
+
+class ComandoScan(Comando):
+    nome = "scan"
+
+    def __init__(self, entrada, saida, minerador=None):
+        super().__init__(entrada, saida)
+        self._minerador = minerador or MineradorDeStream()
+
+    def configurar(self, parser):
+        parser.add_argument("caminho")
+
+    def executar(self, args, ledger):
+        caminho = Path(args.caminho)
+        try:
+            eventos = _ler_dicts_jsonl(caminho)
+        except (OSError, UnicodeError):
+            return 2
+        erros = self._minerador.extrair(eventos)
+        tarefa = caminho.stem
+        novos = 0
+        for erro in erros:
+            chave = "scan:" + _sha256(tarefa + erro.id_da_chamada + erro.texto)
+            _gravado, inserido = ledger.registrar_erro_importado(
+                erro.texto,
+                args.project,
+                tipo="exec_error",
+                ferramenta=erro.ferramenta,
+                contexto={"task": tarefa},
+                chave_importacao=chave,
+            )
+            if inserido:
+                novos += 1
+        grupos = self._minerador.agregar([(tarefa, eventos)])
+        if args.json:
+            self._escrever_json(
+                {
+                    "lidos": len(erros),
+                    "novos": novos,
+                    "grupos": [asdict(g) for g in grupos],
+                }
+            )
+            return 0
+        self._saida.write(
+            "scan: %d lidos, %d novos\n" % (len(erros), novos)
+        )
+        for grupo in grupos:
+            self._saida.write(
+                "%3dx  %d exec  %-13s %s\n"
+                % (
+                    grupo.ocorrencias,
+                    grupo.execucoes,
+                    grupo.ferramenta,
+                    grupo.assinatura,
+                )
+            )
+        return 0
+
+
+class ComandoImport(Comando):
+    nome = "import"
+
+    def configurar(self, parser):
+        parser.add_argument("caminho")
+
+    def executar(self, args, ledger):
+        caminho = Path(args.caminho)
+        try:
+            texto = caminho.read_text(encoding="utf-8")
+        except (OSError, UnicodeError):
+            return 2
+        relatorio = ImportadorJsonl(ledger).importar(
+            texto.splitlines(), args.project
+        )
+        if args.json:
+            self._escrever_json(
+                {
+                    "lidos": relatorio.lidos,
+                    "novos": relatorio.novos,
+                    "ignorados": relatorio.ignorados,
+                }
+            )
+            return 0
+        self._saida.write(
+            "import: %d lidos, %d novos, %d ignorados\n"
+            % (relatorio.lidos, relatorio.novos, relatorio.ignorados)
+        )
+        return 0
+
+
 class Cli:
     def __init__(
         self,
@@ -327,6 +437,8 @@ class Cli:
                 ComandoTop(self._entrada, self._saida),
                 ComandoWin(self._entrada, self._saida),
                 ComandoGate(self._entrada, self._saida),
+                ComandoScan(self._entrada, self._saida),
+                ComandoImport(self._entrada, self._saida),
             ]
         self._comandos = list(comandos)
 
