@@ -155,6 +155,60 @@ def _linha_pista(correcao):
     )
 
 
+class ComandoTop(Comando):
+    nome = "top"
+
+    def configurar(self, parser):
+        parser.add_argument("--days", type=int, default=None)
+        parser.add_argument("--all-projects", action="store_true")
+        parser.add_argument("--resolved", action="store_true")
+
+    def executar(self, args, ledger):
+        projeto = None if args.all_projects else args.project
+        padroes = ledger.o_que_repete(
+            projeto, dias=args.days, resolvidos=args.resolved
+        )
+        if args.json:
+            self._escrever_json({"padroes": [asdict(p) for p in padroes]})
+            return 0
+        if not padroes:
+            self._saida.write("nada se repetindo\n")
+            return 0
+        for p in padroes:
+            estado = "resolvido" if p.resolvido else "sem correção"
+            self._saida.write(
+                "%3dx  %d tasks  %-13s %s\n"
+                % (p.ocorrencias, p.tasks, estado, p.assinatura)
+            )
+        return 0
+
+
+class ComandoWin(Comando):
+    nome = "win"
+
+    def configurar(self, parser):
+        parser.add_argument("texto")
+        parser.add_argument("--task", default="")
+        parser.add_argument("--cost", type=float, default=None)
+
+    def executar(self, args, ledger):
+        o_que = self._ler_texto(args.texto)
+        acerto, streak = ledger.registrar_acerto(
+            o_que,
+            args.project,
+            task=args.task,
+            custo_usd=args.cost,
+        )
+        if args.json:
+            self._escrever_json({"acerto": asdict(acerto), "streak": streak})
+            return 0
+        self._saida.write(
+            "acerto #%d registrado [%s] streak: %d\n"
+            % (acerto.id, acerto.projeto, streak)
+        )
+        return 0
+
+
 class ComandoFind(Comando):
     nome = "find"
 
@@ -203,6 +257,8 @@ class Cli:
                 ComandoErr(self._entrada, self._saida),
                 ComandoFix(self._entrada, self._saida),
                 ComandoFind(self._entrada, self._saida),
+                ComandoTop(self._entrada, self._saida),
+                ComandoWin(self._entrada, self._saida),
             ]
         self._comandos = list(comandos)
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import replace
 
-from erratum.dominio import Correcao, Erro, VereditoDePortao
+from erratum.dominio import Acerto, Correcao, Erro, Padrao, VereditoDePortao
 
 
 class RepositorioDeErros:
@@ -75,6 +75,63 @@ class RepositorioDeErros:
         if not linhas:
             return None
         return self._de_linha(linhas[0])
+
+    def ultimo_ts(self, projeto):
+        linhas = self._banco.consultar(
+            "SELECT MAX(ts) AS ts FROM errors WHERE project = ?",
+            (projeto,),
+        )
+        if not linhas:
+            return None
+        return linhas[0]["ts"]
+
+    def agrupar(self, projeto=None, desde_ts=None):
+        condicoes = []
+        params = []
+        if projeto is not None:
+            condicoes.append("project = ?")
+            params.append(projeto)
+        if desde_ts is not None:
+            condicoes.append("ts >= ?")
+            params.append(desde_ts)
+        where = ""
+        if condicoes:
+            where = " WHERE " + " AND ".join(condicoes)
+        sql = (
+            """
+            SELECT
+                signature AS assinatura,
+                COUNT(*) AS ocorrencias,
+                COUNT(
+                    DISTINCT NULLIF(json_extract(context_json, '$.task'), '')
+                ) AS tasks,
+                GROUP_CONCAT(DISTINCT project) AS projetos,
+                MAX(ts) AS ultimo_ts,
+                MAX(text) AS exemplo,
+                EXISTS(
+                    SELECT 1 FROM fixes
+                    WHERE fixes.signature = errors.signature
+                ) AS resolvido
+            FROM errors
+            """
+            + where
+            + " GROUP BY signature"
+        )
+        linhas = self._banco.consultar(sql, tuple(params))
+        return [self._padrao_de_linha(l) for l in linhas]
+
+    def _padrao_de_linha(self, linha):
+        bruto = linha["projetos"] or ""
+        projetos = tuple(p for p in bruto.split(",") if p)
+        return Padrao(
+            assinatura=linha["assinatura"] or "",
+            ocorrencias=int(linha["ocorrencias"] or 0),
+            tasks=int(linha["tasks"] or 0),
+            projetos=projetos,
+            ultimo_ts=linha["ultimo_ts"] or "",
+            exemplo=linha["exemplo"] or "",
+            resolvido=bool(linha["resolvido"]),
+        )
 
     def _de_linha(self, linha):
         bruto = linha["context_json"]
@@ -162,6 +219,44 @@ class RepositorioDeCorrecoes:
             teste=linha["test"] or "",
             fonte=linha["source"] or "",
         )
+
+
+class RepositorioDeAcertos:
+    def __init__(self, banco):
+        self._banco = banco
+
+    def inserir(self, acerto):
+        contexto_json = json.dumps(acerto.contexto or {}, ensure_ascii=False)
+        with self._banco.transacao() as con:
+            cur = con.execute(
+                """
+                INSERT INTO wins(
+                    ts, project, task, what, cost_usd, context_json
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    acerto.ts,
+                    acerto.projeto,
+                    acerto.task,
+                    acerto.o_que,
+                    acerto.custo_usd,
+                    contexto_json,
+                ),
+            )
+            return replace(acerto, id=cur.lastrowid)
+
+    def contar_desde(self, projeto, ts=None):
+        if ts is None:
+            linhas = self._banco.consultar(
+                "SELECT COUNT(*) AS n FROM wins WHERE project = ?",
+                (projeto,),
+            )
+        else:
+            linhas = self._banco.consultar(
+                "SELECT COUNT(*) AS n FROM wins WHERE project = ? AND ts > ?",
+                (projeto, ts),
+            )
+        return int(linhas[0]["n"] if linhas else 0)
 
 
 class RepositorioDePortoes:

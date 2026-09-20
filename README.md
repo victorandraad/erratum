@@ -32,6 +32,10 @@ rodada some), então uma correção cobre as ocorrências passadas e as futuras.
 | `err "<texto>" [--stage --tool --kind --task]` | registra o erro e já devolve a correção conhecida |
 | `fix <id\|texto> "<nota>" [--ref --test]` | registra a correção pela assinatura do erro |
 | `find "<texto>" [-n N]` | busca no ledger (assinatura, depois FTS); não registra |
+| `top [--days N] [--all-projects] [--resolved]` | lista o que se repete, agrupado por assinatura |
+| `win "<o que>" [--task --cost]` | registra um acerto |
+
+O streak de `win` conta os acertos do projeto com timestamp depois do último erro do mesmo projeto; um erro zera a sequência.
 
 Todos aceitam `--json` e `--project` (padrão: nome da raiz do git). Texto `-` lê do stdin.
 Saída 0 sempre; uso errado sai com 2.

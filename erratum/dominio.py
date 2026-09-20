@@ -97,6 +97,17 @@ class VereditoDePortao:
 
 
 @dataclass(frozen=True)
+class Padrao:
+    assinatura: str
+    ocorrencias: int
+    tasks: int
+    projetos: tuple
+    ultimo_ts: str
+    exemplo: str
+    resolvido: bool
+
+
+@dataclass(frozen=True)
 class Achado:
     origem: str
     assinatura: str
