@@ -139,14 +139,48 @@ class ComandoFix(Comando):
         return 0
 
 
-def _linha_pista(correcao):
+def _sufixo_de_correcao(correcao):
     extra = []
     if correcao.ref:
         extra.append("ref: %s" % correcao.ref)
     if correcao.teste:
         extra.append("teste: %s" % correcao.teste)
-    sufixo = " [%s]" % ", ".join(extra) if extra else ""
-    return "  correção conhecida: %s%s\n" % (correcao.nota, sufixo)
+    return " [%s]" % ", ".join(extra) if extra else ""
+
+
+def _linha_pista(correcao):
+    return "  correção conhecida: %s%s\n" % (
+        correcao.nota,
+        _sufixo_de_correcao(correcao),
+    )
+
+
+class ComandoFind(Comando):
+    nome = "find"
+
+    def configurar(self, parser):
+        parser.add_argument("texto")
+        parser.add_argument("-n", type=int, default=5)
+
+    def executar(self, args, ledger):
+        texto = self._ler_texto(args.texto)
+        achados = ledger.buscar(texto, n=args.n)
+        if args.json:
+            self._escrever_json({"achados": [asdict(a) for a in achados]})
+            return 0
+        if not achados:
+            self._saida.write("nada parecido no ledger\n")
+            return 0
+        for i, achado in enumerate(achados, 1):
+            self._saida.write(
+                "%d. [%s] %s\n" % (i, achado.origem, achado.assinatura)
+            )
+            for correcao in achado.correcoes:
+                self._saida.write(
+                    "   correção: %s%s\n"
+                    % (correcao.nota, _sufixo_de_correcao(correcao))
+                )
+        return 0
 
 
 class Cli:
@@ -168,6 +202,7 @@ class Cli:
             comandos = [
                 ComandoErr(self._entrada, self._saida),
                 ComandoFix(self._entrada, self._saida),
+                ComandoFind(self._entrada, self._saida),
             ]
         self._comandos = list(comandos)
 

@@ -16,6 +16,10 @@ python -m erratum fix 1 "rodar o prep do worktree antes do runner" --ref abc123 
 python -m erratum err "Exit code 1 /tmp/w-99/bin/runner: No such file"
 # erro #2 registrado [acme] assinatura: exit code N /PATH: no such file
 #   correção conhecida: rodar o prep do worktree antes do runner [ref: abc123, teste: test_prep]
+
+python -m erratum find "bin/runner no such file"
+# 1. [fts] exit code N /PATH: no such file
+#    correção: rodar o prep do worktree antes do runner [ref: abc123, teste: test_prep]
 ```
 
 A assinatura normaliza o que é volátil (caminhos viram `/PATH`, números viram `N`, contador de
@@ -27,6 +31,7 @@ rodada some), então uma correção cobre as ocorrências passadas e as futuras.
 |---|---|
 | `err "<texto>" [--stage --tool --kind --task]` | registra o erro e já devolve a correção conhecida |
 | `fix <id\|texto> "<nota>" [--ref --test]` | registra a correção pela assinatura do erro |
+| `find "<texto>" [-n N]` | busca no ledger (assinatura, depois FTS); não registra |
 
 Todos aceitam `--json` e `--project` (padrão: nome da raiz do git). Texto `-` lê do stdin.
 Saída 0 sempre; uso errado sai com 2.

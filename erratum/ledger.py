@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from erratum.busca import BuscaPorAssinatura
+from erratum.busca import BuscaEmCascata, BuscaFTS, BuscaPorAssinatura
 from erratum.dominio import Assinatura, Correcao, Erro, VereditoDePortao
 from erratum.repositorios import (
     RepositorioDeCorrecoes,
@@ -34,7 +34,9 @@ class Ledger:
         erros = RepositorioDeErros(banco)
         correcoes = RepositorioDeCorrecoes(banco)
         portoes = RepositorioDePortoes(banco)
-        buscador = BuscaPorAssinatura(erros, correcoes)
+        buscador = BuscaEmCascata(
+            [BuscaPorAssinatura(erros, correcoes), BuscaFTS(banco, correcoes)]
+        )
         return cls(erros, correcoes, portoes, buscador, relogio)
 
     def _ts(self):

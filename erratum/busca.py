@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+import sqlite3
 from abc import ABC, abstractmethod
 
 from erratum.dominio import Achado, Assinatura
@@ -30,3 +32,93 @@ class BuscaPorAssinatura(Buscador):
             pontuacao=1.0,
         )
         return [achado][:n]
+
+
+class BuscaFTS(Buscador):
+    _TOKEN = re.compile(r"\w{3,}")
+
+    def __init__(self, banco, correcoes):
+        self._banco = banco
+        self._correcoes = correcoes
+
+    @staticmethod
+    def consulta(texto):
+        vistos = set()
+        tokens = []
+        for tok in BuscaFTS._TOKEN.findall((texto or "").lower()):
+            if tok in vistos:
+                continue
+            vistos.add(tok)
+            tokens.append(tok)
+            if len(tokens) == 12:
+                break
+        return " OR ".join('"%s"' % t for t in tokens)
+
+    def buscar(self, texto, n):
+        consulta = self.consulta(texto)
+        if not consulta:
+            return []
+        try:
+            linhas = self._banco.consultar(
+                """
+                SELECT signature, text, bm25(ledger_fts) AS rank
+                FROM ledger_fts
+                WHERE ledger_fts MATCH ?
+                ORDER BY rank, rowid
+                """,
+                (consulta,),
+            )
+        except sqlite3.OperationalError:
+            # FTS5 rejeita consulta malformada; o contrato e devolver vazio
+            return []
+        grupos = []
+        indice = {}
+        for linha in linhas:
+            assinatura = linha["signature"] or ""
+            texto_linha = linha["text"] or ""
+            if assinatura not in indice:
+                indice[assinatura] = len(grupos)
+                grupos.append(
+                    {
+                        "assinatura": assinatura,
+                        "pontuacao": linha["rank"],
+                        "texto": texto_linha,
+                    }
+                )
+                continue
+            grupo = grupos[indice[assinatura]]
+            if not grupo["texto"] and texto_linha:
+                grupo["texto"] = texto_linha
+        achados = []
+        for grupo in grupos[:n]:
+            pontuacao = grupo["pontuacao"]
+            achados.append(
+                Achado(
+                    origem="fts",
+                    assinatura=grupo["assinatura"],
+                    texto=grupo["texto"],
+                    correcoes=tuple(
+                        self._correcoes.por_assinatura(grupo["assinatura"])
+                    ),
+                    pontuacao=0.0 if pontuacao is None else float(pontuacao),
+                )
+            )
+        return achados
+
+
+class BuscaEmCascata(Buscador):
+    def __init__(self, buscadores):
+        self._buscadores = list(buscadores)
+
+    def buscar(self, texto, n):
+        vistos = set()
+        resultado = []
+        for buscador in self._buscadores:
+            for achado in buscador.buscar(texto, n):
+                if achado.assinatura in vistos:
+                    continue
+                vistos.add(achado.assinatura)
+                resultado.append(achado)
+                if len(resultado) >= n:
+                    return resultado
+        return resultado
