@@ -1,0 +1,7 @@
+__pycache__/
+*.db
+*.db-wal
+*.db-shm
+*.jsonl
+*.egg-info/
+.venv/
