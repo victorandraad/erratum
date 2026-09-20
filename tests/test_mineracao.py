@@ -148,6 +148,11 @@ class TestImport(ComArquivos):
         self.cli("import", str(caminho), "--project", "blog")
         self.assertEqual(sorted(l["project"] for l in self._erros()), ["blog", "loja"])
 
+    def test_project_que_nao_e_texto_nao_derruba_a_carga(self):
+        caminho = self._arquivo("dados.jsonl", [{"text": "projeto numerico", "project": 7}])
+        self.assertEqual(self.cli("import", str(caminho))[0], 0)
+        self.assertEqual([l["project"] for l in self._erros()], ["7"])
+
     def test_importador_direto_devolve_a_contagem(self):
         relatorio = ImportadorJsonl(self.ledger).importar(
             [json.dumps(l) for l in self.LINHAS[:2]], "acme")

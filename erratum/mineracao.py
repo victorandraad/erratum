@@ -145,7 +145,7 @@ class ImportadorJsonl:
             task = dado.get("task")
             if task:
                 contexto["task"] = task
-            projeto = dado.get("project") or projeto_padrao
+            projeto = str(dado.get("project") or projeto_padrao)
             _erro, inserido = self._ledger.registrar_erro_importado(
                 texto,
                 projeto,
