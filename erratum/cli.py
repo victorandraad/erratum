@@ -45,6 +45,41 @@ class ProjetoAtual:
         return Path.cwd().name
 
 
+class WorktreeDoGate:
+    def __call__(self, worktree, base):
+        try:
+            topo = self._git(worktree, "rev-parse", "--show-toplevel")
+            if topo.returncode != 0:
+                return "worktree não é um repositório git"
+            commit = self._git(
+                worktree,
+                "rev-parse",
+                "--verify",
+                "--quiet",
+                "--end-of-options",
+                "%s^{commit}" % base,
+            )
+            if commit.returncode != 0:
+                return "base não resolve para um commit"
+            status = self._git(
+                worktree, "status", "--porcelain", "--untracked-files=no"
+            )
+            if status.stdout.strip():
+                return "há alteração rastreada não commitada"
+        except OSError:
+            return "worktree não é um repositório git"
+        return None
+
+    def _git(self, worktree, *args):
+        return subprocess.run(
+            ["git", *args],
+            cwd=worktree,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+
 class Comando(ABC):
     nome = ""
 
@@ -233,6 +268,10 @@ class ComandoWin(Comando):
 class ComandoGate(Comando):
     nome = "gate"
 
+    def __init__(self, entrada, saida, worktree_do_gate=None):
+        super().__init__(entrada, saida)
+        self._worktree_do_gate = worktree_do_gate or WorktreeDoGate()
+
     def configurar(self, parser):
         parser.add_argument("lista")
         parser.add_argument("--base", required=True)
@@ -242,6 +281,13 @@ class ComandoGate(Comando):
     def executar(self, args, ledger):
         nomes = [n.strip() for n in args.lista.split(",") if n.strip()]
         if not nomes or any(n not in PORTOES for n in nomes):
+            return 2
+        recusa = self._worktree_do_gate(args.worktree, args.base)
+        if recusa:
+            if args.json:
+                self._escrever_json({"erro": recusa})
+            else:
+                self._saida.write("%s\n" % recusa)
             return 2
 
         def ao_decidir(nome, veredito, detalhe):
@@ -345,8 +391,10 @@ class ComandoScan(Comando):
         erros = self._minerador.extrair(eventos)
         tarefa = caminho.stem
         novos = 0
-        for erro in erros:
-            chave = "scan:" + _sha256(tarefa + erro.id_da_chamada + erro.texto)
+        for indice, erro in enumerate(erros):
+            chave = "scan:" + _sha256(
+                tarefa + erro.id_da_chamada + erro.texto + str(indice)
+            )
             _gravado, inserido = ledger.registrar_erro_importado(
                 erro.texto,
                 args.project,

@@ -145,14 +145,17 @@ class ImportadorJsonl:
             task = dado.get("task")
             if task:
                 contexto["task"] = task
+            projeto = dado.get("project") or projeto_padrao
             _erro, inserido = self._ledger.registrar_erro_importado(
                 texto,
-                dado.get("project") or projeto_padrao,
+                projeto,
                 tipo=dado.get("kind") or "error",
                 etapa=dado.get("stage") or "",
                 ferramenta=dado.get("tool") or "",
                 contexto=contexto,
-                chave_importacao="import:" + _sha256(linha.strip()),
+                chave_importacao="import:" + _sha256(
+                    projeto + "\n" + linha.strip()
+                ),
                 ts=dado.get("ts") or None,
             )
             if inserido:
