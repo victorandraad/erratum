@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import re
+import shlex
 import sqlite3
+import subprocess
+import sys
 from abc import ABC, abstractmethod
 
 from erratum.dominio import Achado, Assinatura
@@ -106,6 +109,52 @@ class BuscaFTS(Buscador):
         return achados
 
 
+class BuscaExterna(Buscador):
+    def __init__(self, comando, aviso=None, timeout=10):
+        self._comando = comando
+        self._aviso = sys.stderr if aviso is None else aviso
+        self.timeout = timeout
+
+    def buscar(self, texto, n):
+        try:
+            comando = self._comando or ""
+            if not comando.strip():
+                self._avisar("comando vazio")
+                return []
+            proc = subprocess.run(
+                shlex.split(comando) + [texto],
+                capture_output=True,
+                text=True,
+                timeout=self.timeout,
+            )
+            if proc.returncode != 0:
+                self._avisar("codigo %s" % proc.returncode)
+                return []
+            achados = []
+            for linha in proc.stdout.splitlines():
+                if not linha:
+                    continue
+                achados.append(
+                    Achado(
+                        origem="external",
+                        assinatura=Assinatura(linha).valor,
+                        texto=linha,
+                        correcoes=(),
+                        pontuacao=0.0,
+                    )
+                )
+                if len(achados) >= n:
+                    break
+            return achados
+        except (ValueError, OSError, subprocess.TimeoutExpired) as exc:
+            self._avisar(exc)
+            return []
+
+    def _avisar(self, motivo):
+        texto = str(motivo).replace("\n", " ")
+        self._aviso.write("busca externa falhou: %s\n" % texto)
+
+
 class BuscaEmCascata(Buscador):
     def __init__(self, buscadores):
         self._buscadores = list(buscadores)
@@ -114,7 +163,9 @@ class BuscaEmCascata(Buscador):
         vistos = set()
         resultado = []
         for buscador in self._buscadores:
-            for achado in buscador.buscar(texto, n):
+            if len(resultado) >= n:
+                return resultado
+            for achado in buscador.buscar(texto, n + len(vistos)):
                 if achado.assinatura in vistos:
                     continue
                 vistos.add(achado.assinatura)

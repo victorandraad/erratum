@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import os
 from datetime import datetime, timedelta, timezone
 
-from erratum.busca import BuscaEmCascata, BuscaFTS, BuscaPorAssinatura
+from erratum.busca import BuscaEmCascata, BuscaExterna, BuscaFTS, BuscaPorAssinatura
 from erratum.dominio import Acerto, Assinatura, Correcao, Erro, VereditoDePortao
 from erratum.repositorios import (
     RepositorioDeAcertos,
@@ -30,16 +31,23 @@ class Ledger:
         self._relogio = relogio
 
     @classmethod
-    def sobre(cls, banco, relogio=None):
+    def sobre(cls, banco, relogio=None, ambiente=None, aviso=None):
         if relogio is None:
             relogio = _agora_utc
+        if ambiente is None:
+            ambiente = os.environ
         erros = RepositorioDeErros(banco)
         correcoes = RepositorioDeCorrecoes(banco)
         portoes = RepositorioDePortoes(banco)
         acertos = RepositorioDeAcertos(banco)
-        buscador = BuscaEmCascata(
-            [BuscaPorAssinatura(erros, correcoes), BuscaFTS(banco, correcoes)]
-        )
+        buscadores = [
+            BuscaPorAssinatura(erros, correcoes),
+            BuscaFTS(banco, correcoes),
+        ]
+        cmd = ambiente.get("ERRATUM_SEARCH_CMD", "").strip()
+        if cmd:
+            buscadores.append(BuscaExterna(cmd, aviso=aviso))
+        buscador = BuscaEmCascata(buscadores)
         return cls(erros, correcoes, portoes, acertos, buscador, relogio)
 
     def _ts(self):
