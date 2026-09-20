@@ -88,6 +88,45 @@ class TestGate(CasoComLedger):
     def test_sem_base_e_uso_errado(self):
         self.assertEqual(self.cli("gate", "em-dash")[0], 2)
 
+    def test_worktree_com_alteracao_nao_commitada_e_recusado_sem_perder_nada(self):
+        # o fix-noop faz checkout por cima dos arquivos de producao: rodar com edicao pendente
+        # apagaria o trabalho de quem chamou
+        wt, base = self._repo(TESTE_QUE_PROVA)
+        pendente = CALC_CERTO + "\n# edicao ainda nao commitada\n"
+        (wt / "acme" / "calc.py").write_text(pendente)
+        codigo, _ = self.cli("gate", "fix-noop", "--base", base, "--worktree", str(wt),
+                             "--test-cmd", CMD)
+        self.assertEqual(codigo, 2)
+        self.assertEqual((wt / "acme" / "calc.py").read_text(), pendente)
+        self.assertEqual(self._gate_runs(), [])
+
+    def test_alteracao_em_stage_tambem_e_recusada(self):
+        wt, base = self._repo(TESTE_QUE_PROVA)
+        (wt / "acme" / "calc.py").write_text(CALC_CERTO + "\n# em stage\n")
+        git(wt, "add", "acme/calc.py")
+        self.assertEqual(self.cli("gate", "stub-neutro", "--base", base,
+                                  "--worktree", str(wt))[0], 2)
+
+    def test_arquivo_nao_rastreado_nao_impede(self):
+        wt, base = self._repo(TESTE_QUE_PROVA)
+        (wt / "rascunho.txt").write_text("nota solta")
+        self.assertEqual(self.cli("gate", "stub-neutro", "--base", base,
+                                  "--worktree", str(wt))[0], 0)
+
+    def test_base_que_nao_existe_e_uso_errado_e_nao_aprova_no_escuro(self):
+        wt, _ = self._repo(TESTE_QUE_PROVA)
+        codigo, _ = self.cli("gate", "stub-neutro,em-dash", "--base", "ref-que-nao-existe",
+                             "--worktree", str(wt))
+        self.assertEqual(codigo, 2)
+        self.assertEqual(self._gate_runs(), [])
+
+    def test_worktree_que_nao_e_repo_git_e_uso_errado(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.assertEqual(self.cli("gate", "stub-neutro", "--base", "HEAD",
+                                  "--worktree", tmp.name)[0], 2)
+        self.assertEqual(self._gate_runs(), [])
+
 
 class TestTopMostraPortoes(CasoComLedger):
     def test_taxa_de_reprovacao_por_portao(self):

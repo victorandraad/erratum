@@ -90,6 +90,16 @@ class TestMinerador(ComArquivos):
         self.assertEqual(len(self._erros()), 4)
         self.assertEqual(self.ledger.o_que_repete("acme")[0].ocorrencias, 2)
 
+    def test_dois_erros_iguais_sem_id_na_mesma_execucao_sao_duas_ocorrencias(self):
+        repetido = [_retorno(None, "falha identica"), _retorno(None, "falha identica")]
+        caminho = self._arquivo("run.jsonl", repetido)
+        self.cli("scan", str(caminho))
+        self.assertEqual(len(self._erros()), 2)
+        # stream so cresce no fim: reler com mais eventos nao duplica os antigos
+        caminho = self._arquivo("run.jsonl", repetido + [_retorno(None, "falha identica")])
+        self.cli("scan", str(caminho))
+        self.assertEqual(len(self._erros()), 3)
+
     def test_scan_de_arquivo_inexistente_e_uso_errado(self):
         self.assertEqual(self.cli("scan", str(Path(self._dir.name) / "nao-existe.jsonl"))[0], 2)
 
@@ -130,6 +140,13 @@ class TestImport(ComArquivos):
         self.cli("import", str(self._arquivo("a.jsonl", self.LINHAS[:2])))
         self.cli("import", str(self._arquivo("b.jsonl", self.LINHAS[:3])))
         self.assertEqual(len(self._erros()), 3)
+
+    def test_mesma_linha_sem_project_em_projetos_diferentes_sao_dois_registros(self):
+        caminho = self._arquivo("dados.jsonl", [{"text": "sem projeto nem ts"}])
+        self.cli("import", str(caminho), "--project", "loja")
+        self.cli("import", str(caminho), "--project", "blog")
+        self.cli("import", str(caminho), "--project", "blog")
+        self.assertEqual(sorted(l["project"] for l in self._erros()), ["blog", "loja"])
 
     def test_importador_direto_devolve_a_contagem(self):
         relatorio = ImportadorJsonl(self.ledger).importar(
