@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import replace
 
-from erratum.dominio import Acerto, Correcao, Erro, Padrao, VereditoDePortao
+from erratum.dominio import Acerto, Correcao, Erro, Padrao, TaxaDePortao, VereditoDePortao
 
 
 class RepositorioDeErros:
@@ -279,3 +279,45 @@ class RepositorioDePortoes:
                 ),
             )
             return replace(veredito, id=cur.lastrowid)
+
+    def taxas(self, projeto=None, desde_ts=None):
+        condicoes = []
+        params = []
+        if projeto is not None:
+            condicoes.append("project = ?")
+            params.append(projeto)
+        if desde_ts is not None:
+            condicoes.append("ts >= ?")
+            params.append(desde_ts)
+        where = ""
+        if condicoes:
+            where = " WHERE " + " AND ".join(condicoes)
+        sql = (
+            """
+            SELECT
+                gate AS portao,
+                COUNT(*) AS rodadas,
+                SUM(CASE WHEN verdict = 'reprovou' THEN 1 ELSE 0 END)
+                    AS reprovou,
+                SUM(CASE WHEN verdict = 'pulou' THEN 1 ELSE 0 END) AS pulou
+            FROM gate_runs
+            """
+            + where
+            + " GROUP BY gate"
+        )
+        linhas = self._banco.consultar(sql, tuple(params))
+        return [self._taxa_de_linha(l) for l in linhas]
+
+    def _taxa_de_linha(self, linha):
+        rodadas = int(linha["rodadas"] or 0)
+        reprovou = int(linha["reprovou"] or 0)
+        pulou = int(linha["pulou"] or 0)
+        julgados = rodadas - pulou
+        taxa = (reprovou / julgados) if julgados else 0.0
+        return TaxaDePortao(
+            portao=linha["portao"] or "",
+            rodadas=rodadas,
+            reprovou=reprovou,
+            pulou=pulou,
+            taxa=taxa,
+        )

@@ -10,6 +10,7 @@ from pathlib import Path
 
 from erratum.banco import Banco
 from erratum.ledger import ErroNaoEncontrado, Ledger
+from erratum.portoes import PORTOES, DiffDoDev
 
 
 class _UsoErrado(Exception):
@@ -168,17 +169,35 @@ class ComandoTop(Comando):
         padroes = ledger.o_que_repete(
             projeto, dias=args.days, resolvidos=args.resolved
         )
+        taxas = ledger.taxa_de_portoes(projeto, dias=args.days)
         if args.json:
-            self._escrever_json({"padroes": [asdict(p) for p in padroes]})
+            self._escrever_json(
+                {
+                    "padroes": [asdict(p) for p in padroes],
+                    "portoes": [asdict(t) for t in taxas],
+                }
+            )
             return 0
         if not padroes:
             self._saida.write("nada se repetindo\n")
-            return 0
-        for p in padroes:
-            estado = "resolvido" if p.resolvido else "sem correção"
+        else:
+            for p in padroes:
+                estado = "resolvido" if p.resolvido else "sem correção"
+                self._saida.write(
+                    "%3dx  %d tasks  %-13s %s\n"
+                    % (p.ocorrencias, p.tasks, estado, p.assinatura)
+                )
+        for t in taxas:
+            julgados = t.rodadas - t.pulou
             self._saida.write(
-                "%3dx  %d tasks  %-13s %s\n"
-                % (p.ocorrencias, p.tasks, estado, p.assinatura)
+                "portão %s: %d/%d reprovou (%d%%), %d pulou\n"
+                % (
+                    t.portao,
+                    t.reprovou,
+                    julgados,
+                    int(round(t.taxa * 100)),
+                    t.pulou,
+                )
             )
         return 0
 
@@ -207,6 +226,54 @@ class ComandoWin(Comando):
             % (acerto.id, acerto.projeto, streak)
         )
         return 0
+
+
+class ComandoGate(Comando):
+    nome = "gate"
+
+    def configurar(self, parser):
+        parser.add_argument("lista")
+        parser.add_argument("--base", required=True)
+        parser.add_argument("--worktree", default=".")
+        parser.add_argument("--test-cmd", action="append", default=None)
+
+    def executar(self, args, ledger):
+        nomes = [n.strip() for n in args.lista.split(",") if n.strip()]
+        if not nomes or any(n not in PORTOES for n in nomes):
+            return 2
+
+        def ao_decidir(nome, veredito, detalhe):
+            ledger.registrar_portao(nome, veredito, detalhe, args.project)
+
+        resultados = []
+        for nome in nomes:
+            resultado = PORTOES[nome](
+                DiffDoDev(Path(args.worktree), args.base),
+                comandos_de_teste=args.test_cmd,
+                ao_decidir=ao_decidir,
+            ).rodar()
+            resultados.append((nome, resultado))
+        if args.json:
+            self._escrever_json(
+                {
+                    "portoes": [
+                        {
+                            "portao": nome,
+                            "veredito": r.veredito,
+                            "motivo": r.motivo,
+                            "detalhe": r.detalhe,
+                        }
+                        for nome, r in resultados
+                    ],
+                    "reprovou": any(r.reprovou for _, r in resultados),
+                }
+            )
+        else:
+            for nome, r in resultados:
+                self._saida.write(
+                    "%s: %s %s\n" % (nome, r.veredito, r.motivo or r.detalhe)
+                )
+        return 1 if any(r.reprovou for _, r in resultados) else 0
 
 
 class ComandoFind(Comando):
@@ -259,6 +326,7 @@ class Cli:
                 ComandoFind(self._entrada, self._saida),
                 ComandoTop(self._entrada, self._saida),
                 ComandoWin(self._entrada, self._saida),
+                ComandoGate(self._entrada, self._saida),
             ]
         self._comandos = list(comandos)
 

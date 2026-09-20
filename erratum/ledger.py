@@ -139,6 +139,14 @@ class Ledger:
 
         return sorted(padroes, key=chave)
 
+    def taxa_de_portoes(self, projeto, dias=None):
+        desde = None
+        if dias is not None:
+            desde = (self._relogio() - timedelta(days=dias)).isoformat(
+                timespec="microseconds"
+            )
+        return self._portoes.taxas(projeto, desde)
+
     def registrar_acerto(
         self, o_que, projeto, task="", custo_usd=None, contexto=None
     ):

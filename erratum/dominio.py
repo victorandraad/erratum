@@ -108,6 +108,15 @@ class Padrao:
 
 
 @dataclass(frozen=True)
+class TaxaDePortao:
+    portao: str
+    rodadas: int
+    reprovou: int
+    pulou: int
+    taxa: float
+
+
+@dataclass(frozen=True)
 class Achado:
     origem: str
     assinatura: str
