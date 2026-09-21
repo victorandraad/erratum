@@ -219,6 +219,53 @@ class RepositorioDeCorrecoes:
                 raise
             return existente, False
 
+    def inserir_semente(self, correcao, texto_do_erro, chave_importacao):
+        existente = self._por_chave(chave_importacao)
+        if existente is not None:
+            return existente, False
+        src = "seed:%s" % chave_importacao.split(":", 1)[-1]
+        try:
+            with self._banco.transacao() as con:
+                if chave_importacao:
+                    linha = con.execute(
+                        "SELECT * FROM fixes WHERE import_key = ?",
+                        (chave_importacao,),
+                    ).fetchone()
+                    if linha is not None:
+                        return self._de_linha(linha), False
+                cur = con.execute(
+                    """
+                    INSERT INTO fixes(
+                        ts, project, signature, note, ref, test, source,
+                        import_key
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        correcao.ts,
+                        correcao.projeto,
+                        correcao.assinatura,
+                        correcao.nota,
+                        correcao.ref,
+                        correcao.teste,
+                        correcao.fonte,
+                        chave_importacao,
+                    ),
+                )
+                novo_id = cur.lastrowid
+                con.execute(
+                    """
+                    INSERT INTO ledger_fts(signature, text, note, src)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    (correcao.assinatura, texto_do_erro, correcao.nota, src),
+                )
+            return replace(correcao, id=novo_id), True
+        except sqlite3.IntegrityError:
+            existente = self._por_chave(chave_importacao)
+            if existente is None:
+                raise
+            return existente, False
+
     def por_assinatura(self, assinatura):
         linhas = self._banco.consultar(
             "SELECT * FROM fixes WHERE signature = ? ORDER BY id",

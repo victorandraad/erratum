@@ -14,6 +14,7 @@ from erratum.banco import Banco
 from erratum.ledger import ErroNaoEncontrado, Ledger
 from erratum.mineracao import ImportadorJsonl, MineradorDeStream
 from erratum.portoes import PORTOES, DiffDoDev
+from erratum.sementes import Semeador
 
 
 class _UsoErrado(Exception):
@@ -435,6 +436,32 @@ class ComandoScan(Comando):
         return 0
 
 
+class ComandoSeed(Comando):
+    nome = "seed"
+
+    def configurar(self, parser):
+        parser.add_argument("--list", action="store_true")
+
+    def executar(self, args, ledger):
+        semeador = Semeador(ledger)
+        sementes = semeador.sementes()
+        if args.list:
+            if args.json:
+                self._escrever_json({"sementes": sementes})
+                return 0
+            for semente in sementes:
+                frase = semente["erro"].split(".")[0].strip()
+                self._saida.write("%s  %s\n" % (semente["slug"], frase))
+            return 0
+        novas = semeador.semear()
+        total = len(sementes)
+        if args.json:
+            self._escrever_json({"novas": novas, "total": total})
+            return 0
+        self._saida.write("semeou %d novas (total %d)\n" % (novas, total))
+        return 0
+
+
 class ComandoImport(Comando):
     nome = "import"
 
@@ -491,6 +518,7 @@ class Cli:
                 ComandoGate(self._entrada, self._saida),
                 ComandoScan(self._entrada, self._saida),
                 ComandoImport(self._entrada, self._saida),
+                ComandoSeed(self._entrada, self._saida),
             ]
         self._comandos = list(comandos)
 

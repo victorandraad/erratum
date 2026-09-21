@@ -67,7 +67,7 @@ class Ledger:
     ):
         pistas = []
         if com_pistas:
-            pistas = [a for a in self.buscar(texto) if a.correcoes]
+            pistas = list(self.buscar(texto, so_resolvidos=True))
         erro = self._montar_erro(
             texto, projeto, tipo, etapa, ferramenta, contexto, ts
         )
@@ -159,6 +159,27 @@ class Ledger:
         return self._correcoes.inserir(
             correcao, chave_importacao=chave_importacao
         )
+
+    def registrar_semente(self, semente):
+        slug = semente["slug"]
+        erro = semente["erro"]
+        chave = "semente:%s" % slug
+        nota = "%s\nCausa: %s\nPrevenção: %s" % (
+            semente["correcao"],
+            semente["causa"],
+            semente["prevencao"],
+        )
+        correcao = Correcao(
+            id=0,
+            ts=self._ts(),
+            projeto="geral",
+            assinatura=Assinatura(erro).valor,
+            nota=nota,
+            ref=chave,
+            teste="",
+            fonte="semente",
+        )
+        return self._correcoes.inserir_semente(correcao, erro, chave)
 
     def registrar_correcao_importada(
         self,

@@ -16,3 +16,6 @@ erratum = "erratum.cli:main"
 
 [tool.setuptools]
 packages = ["erratum"]
+
+[tool.setuptools.package-data]
+erratum = ["sementes.json"]
