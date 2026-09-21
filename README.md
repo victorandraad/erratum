@@ -72,10 +72,10 @@ python3 -c "import sqlite3; sqlite3.connect(':memory:').execute('create virtual 
 ```
 
 ```sh
-pipx install git+https://github.com/victorandraad/erratum     # recomendado: comando global `erratum`
-pip install git+https://github.com/victorandraad/erratum      # dentro de um venv
+pipx install git+https://github.com/<org>/erratum     # recomendado: comando global `erratum`
+pip install git+https://github.com/<org>/erratum      # dentro de um venv
 pipx install erratum-cli                               # pelo índice, quando a versão estiver publicada
-git clone https://github.com/victorandraad/erratum && PYTHONPATH=$PWD/erratum python3 -m erratum top   # sem instalar
+git clone https://github.com/<org>/erratum && PYTHONPATH=$PWD/erratum python3 -m erratum top   # sem instalar
 ```
 
 O pacote no índice se chama `erratum-cli` (o nome `erratum` já tinha dono); o comando continua
