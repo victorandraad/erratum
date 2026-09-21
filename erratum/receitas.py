@@ -8,7 +8,8 @@ from dataclasses import dataclass, replace
 
 # grupo que contem + * ou { e o proprio grupo e seguido de + * ou {
 _QUANTIFICADOR_ANINHADO = re.compile(r"\([^()]*[+*{][^()]*\)[+*{]")
-_PLACEHOLDER = re.compile(r"(?:\\<|<)[^\\>]+(?:\\>|>)")
+_PLACEHOLDER = re.compile(r"<[^<>\s]+>")
+_OPCIONAL = re.compile(r" \[(?=-|<)")
 
 
 @dataclass(frozen=True)
@@ -25,7 +26,7 @@ class Receita:
     origem: str
 
     def comando_obrigatorio(self):
-        return (self.comando or "").split(" [", 1)[0]
+        return _OPCIONAL.split(self.comando or "", 1)[0]
 
 
 @dataclass(frozen=True)
@@ -320,9 +321,7 @@ class VerificadorDeComando:
 def _reindexar_fts(con, receita):
     src = "receita:%d" % receita.id
     con.execute("DELETE FROM receitas_fts WHERE src = ?", (src,))
-    nota = " ".join(
-        x for x in (receita.comando, receita.notas, receita.perigo or "") if x
-    )
+    nota = receita.notas or ""
     con.execute(
         """
         INSERT INTO receitas_fts(signature, text, note, src)
@@ -343,12 +342,17 @@ def _em_vez_de_de(bruto):
 
 
 def _padrao_canonico(comando):
-    base = (comando or "").split(" [", 1)[0]
+    # trecho opcional so conta quando abre com flag ou marcador: " [--x" ou " [<x"
+    base = _OPCIONAL.split(comando or "", 1)[0]
     if not base:
         return ""
-    escapado = re.escape(base)
-    escapado = _PLACEHOLDER.sub(r"\\S+", escapado)
-    return escapado.replace("\\ ", r"\s+")
+    partes = [
+        re.escape(literal).replace("\\ ", r"\s+")
+        for literal in _PLACEHOLDER.split(base)
+    ]
+    # ponytail: marcador vale qualquer texto da mesma linha (lazy); com o teto de 4 KB
+    # do comando o custo fica limitado. Se pesar, trocar por \S+ fora de aspas.
+    return ".+?".join(partes)
 
 
 def _casa_canonico(trecho, receita):

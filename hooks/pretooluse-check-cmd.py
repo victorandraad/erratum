@@ -47,9 +47,10 @@ def _checar(comando, dado):
     task = dado.get("session_id")
     if isinstance(task, str) and task:
         argv.extend(["--task", task])
+    # o projeto sai da raiz do git do cwd da sessao, como em qualquer chamada do erratum
     cwd = dado.get("cwd")
-    if isinstance(cwd, str) and cwd:
-        argv.extend(["--project", Path(cwd).name])
+    if not (isinstance(cwd, str) and Path(cwd).is_dir()):
+        cwd = None
     try:
         return subprocess.run(
             argv,
@@ -57,7 +58,8 @@ def _checar(comando, dado):
             capture_output=True,
             text=True,
             env=os.environ,
-            timeout=30,
+            cwd=cwd,
+            timeout=5,
         )
     except (OSError, subprocess.TimeoutExpired):
         return None
@@ -65,7 +67,7 @@ def _checar(comando, dado):
 
 def _aviso_de(dado):
     nome = dado.get("receita") or ""
-    comando = (dado.get("comando") or "").split(" [", 1)[0]
+    comando = dado.get("comando") or ""
     aviso = "use a receita %s: %s\n" % (nome, comando)
     if dado.get("perigo"):
         aviso += "perigo: %s\n" % dado["perigo"]

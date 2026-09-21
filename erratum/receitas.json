@@ -1,50 +1,56 @@
 [
   {
     "slug": "esperar-ci-do-pr",
-    "quando": "esperar o CI de um pull request terminar sem poll manual",
+    "quando": "Esperar o CI de um pull request terminar antes de seguir (merge, deploy, próxima etapa).",
     "comando": "gh pr checks <pr> --watch --fail-fast",
+    "notas": "Bloqueia até os checks fecharem e sai diferente de zero no primeiro vermelho. Rode em background e siga outro trabalho: laço de sleep com gh acorda o agente a cada volta e cada volta relê o contexto inteiro.",
+    "perigo": null,
     "em_vez_de": [
-      "(?:while\\s|until\\s|sleep\\s+\\d+)[\\s\\S]{0,200}gh\\s+(pr\\s+checks|run\\s+view)"
-    ],
-    "notas": "o --watch bloqueia ate os checks fecharem",
-    "perigo": "rode em background"
+      "\\b(?:while|until)\\b[\\s\\S]{0,400}?\\bgh\\s+(?:pr\\s+(?:checks|view|status)|run\\s+(?:view|list))\\b",
+      "\\bsleep\\s+\\d+[\\s\\S]{0,200}?\\bgh\\s+(?:pr\\s+(?:checks|view|status)|run\\s+(?:view|list))\\b"
+    ]
   },
   {
     "slug": "consultar-sqlite-sem-o-binario",
-    "quando": "consultar um sqlite quando o binario sqlite3 nao esta instalado",
-    "comando": "python3 -c \"import sqlite3,sys; [print(*l, sep='|') for l in sqlite3.connect(sys.argv[1]).execute(sys.argv[2])]\" <db> <sql>",
+    "quando": "Consultar um banco SQLite quando o binário sqlite3 não está instalado na máquina.",
+    "comando": "python3 -c \"import sqlite3,sys; [print(*l, sep='|') for l in sqlite3.connect(sys.argv[1]).execute(sys.argv[2])]\" <banco.db> \"<sql>\"",
+    "notas": "Uma linha só, banco e SQL por argumento: nada de aspas dentro de aspas, que é onde o python -c montado na hora quebra. Só leitura; para escrever, use um script com transação.",
+    "perigo": null,
     "em_vez_de": [
-      "python3?\\s+-(?:c|\\s*<<)[\\s\\S]{0,400}sqlite3"
-    ],
-    "notas": "o binario sqlite3 e o caminho curto; isto e o fallback"
+      "\\bpython3?\\s+-c\\s+[\"'][\\s\\S]{0,800}?\\bsqlite3\\.connect\\b",
+      "\\bpython3?\\s+-?\\s*<<[\\s\\S]{0,800}?\\bsqlite3\\.connect\\b"
+    ]
   },
   {
     "slug": "suite-com-estado-isolado",
-    "quando": "rodar a suite com diretorio de estado isolado e descartavel",
-    "comando": "APP_STATE_DIR=\"$(mktemp -d)\" python3 -m unittest discover tests",
+    "quando": "Rodar a suíte de testes de um projeto que grava estado em disco, sem sujar o estado real nem herdar o da rodada anterior.",
+    "comando": "<VAR_DE_ESTADO>=\"$(mktemp -d)\" python3 -m unittest discover tests",
+    "notas": "A variável é a que o projeto lê para achar o diretório de estado. O mktemp dá um diretório novo por rodada; caminho fixo em /tmp vaza estado de uma rodada para a outra e duas suítes em paralelo se pisam.",
+    "perigo": null,
     "em_vez_de": [
-      "(?:APP_STATE_DIR|DATA_HOME)=/tmp[\\s\\S]{0,80}(?:python3?\\s+-m\\s+(?:unittest|pytest)|pytest)"
-    ],
-    "notas": "use mktemp -d, nao um caminho fixo em /tmp"
+      "\\b[A-Z][A-Z0-9_]*=[\"']?/tmp/[\\w./-]+[\"']?\\s*(?:&&|;)?\\s*(?:python3?\\s+-m\\s+(?:unittest|pytest)|pytest)\\b"
+    ]
   },
   {
     "slug": "worktree-para-trabalho-isolado",
-    "quando": "isolar trabalho num worktree em vez de copiar o repositorio",
-    "comando": "git worktree add -b <branch> <dir> <base>",
+    "quando": "Trabalhar numa branch sem mexer no checkout em uso: tarefa paralela, agente, experimento descartável.",
+    "comando": "git worktree add -b <branch> ../<pasta> <base>",
+    "notas": "O worktree compartilha o .git, então o commit feito lá já existe no repositório de origem. Cópia da pasta ou clone local cria um segundo repositório, e o trabalho fica preso nele. Ao terminar: git worktree remove ../<pasta>.",
+    "perigo": null,
     "em_vez_de": [
-      "git\\s+clone\\s+\\.\\s",
-      "cp\\s+-r\\s+\\.\\s",
-      "rsync\\s+-a\\s+\\./"
-    ],
-    "notas": "worktree reusa o objeto store; clone/cp/rsync da raiz nao"
+      "\\bgit\\s+clone\\s+(?:\\.|/|~)\\S*",
+      "\\bcp\\s+-[a-zA-Z]*[rRa][a-zA-Z]*\\s+\\./?\\s+\\S+",
+      "\\brsync\\s+-[a-zA-Z]+\\s+\\./?\\s+\\S+"
+    ]
   },
   {
     "slug": "reiniciar-servico-com-saude",
-    "quando": "reiniciar um servico e esperar a saude responder",
-    "comando": "systemctl restart <servico> && timeout 60 sh -c 'until curl -fsS http://127.0.0.1:8080/health >/dev/null; do sleep 2; done'",
+    "quando": "Reiniciar um serviço e só seguir depois que ele responder no endpoint de saúde.",
+    "comando": "systemctl restart <servico> && timeout 60 sh -c 'until curl -fsS <url-de-saude> >/dev/null; do sleep 2; done'",
+    "notas": "Espera o serviço de verdade, com teto de 60 segundos, em vez de um sleep de tamanho chutado: o sleep fixo ou é curto e o curl falha, ou é longo e todo restart paga a espera cheia. Sai diferente de zero se a saúde não voltar.",
+    "perigo": "Reiniciar derruba as conexões abertas do serviço: confirme que é o serviço certo e que ninguém depende dele agora.",
     "em_vez_de": [
-      "(?:systemctl\\s+restart|service\\s+\\S+\\s+restart)[\\s\\S]{0,80}sleep[\\s\\S]{0,80}curl"
-    ],
-    "notas": "sleep fixo nao prova que o servico subiu"
+      "\\b(?:systemctl\\s+restart|service\\s+\\S+\\s+restart)\\b[\\s\\S]{0,120}?\\bsleep\\s+\\d+[\\s\\S]{0,120}?\\bcurl\\b"
+    ]
   }
 ]

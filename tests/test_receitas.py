@@ -202,6 +202,22 @@ class TesteCheckCmd(CasoComLedger):
         self.assertEqual(codigo, 0)
         self.assertEqual(self.cli("check-cmd", "python3 -m unittest discover tests")[0], 1)
 
+    def test_canonico_exige_o_comando_inteiro_nao_so_o_prefixo(self):
+        self.cli(
+            "recipe", "add", "consulta", "--quando", "consultar o banco",
+            "--cmd", 'bin/sql "[leitura]" <banco> "<sql>" --so-leitura [--formato <f>]',
+        )
+        _c, saida = self.cli("check-cmd", 'bin/sql "[leitura]" a.db', "--json")
+        self.assertIsNone(json.loads(saida)["tipo"])
+        _c, saida = self.cli(
+            "check-cmd", 'bin/sql "[leitura]" a.db "select 1 from t" --so-leitura', "--json"
+        )
+        self.assertEqual(json.loads(saida)["tipo"], "uso")
+
+    def test_indice_do_how_e_nome_quando_e_notas(self):
+        linha = self.banco.consultar("SELECT * FROM receitas_fts")[0]
+        self.assertNotIn("ci-espera", linha["note"] or "")
+
     def test_json(self):
         codigo, saida = self.cli("check-cmd", "gh run watch 99", "--json")
         self.assertEqual(codigo, 1)
@@ -244,6 +260,33 @@ class TesteCheckCmd(CasoComLedger):
         self.cli("check-cmd", "gh pr checks 12 --watch")
         self.banco._con.set_trace_callback(None)
         self.assertFalse([s for s in vistos if "fts" in s.lower()], vistos)
+
+
+class TesteCaminhoRapido(unittest.TestCase):
+    def test_check_cmd_nao_carrega_portoes_mineracao_nem_sementes(self):
+        import os
+        import subprocess
+        import sys
+
+        codigo = (
+            "import sys\n"
+            "from erratum import cli\n"
+            "try:\n"
+            "    cli.main(['check-cmd', 'ls', '--project', 'acme'])\n"
+            "except SystemExit:\n"
+            "    pass\n"
+            "pesados = ('erratum.portoes', 'erratum.mineracao', 'erratum.sementes')\n"
+            "print(sorted(m for m in sys.modules if m in pesados))\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            ambiente = dict(os.environ)
+            ambiente["ERRATUM_DB"] = str(Path(tmp) / "ledger.db")
+            ambiente["PYTHONPATH"] = str(Path(__file__).resolve().parent.parent)
+            proc = subprocess.run(
+                [sys.executable, "-B", "-c", codigo],
+                env=ambiente, capture_output=True, text=True, timeout=30,
+            )
+        self.assertEqual(proc.stdout.strip(), "[]", proc.stderr)
 
 
 if __name__ == "__main__":

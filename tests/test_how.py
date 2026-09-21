@@ -44,6 +44,11 @@ class TesteHow(CasoComLedger):
         self.assertIn("esperar-ci", saida)
         self.assertIn("gh pr checks <pr> --watch --fail-fast", saida)
         self.assertIn("rode em background", saida)
+        # mesmo cabeçalho do find: posição, origem, veredito e confiança
+        self.assertRegex(saida, r"1\. \[fts\] (match|talvez) \(0\.\d\d\) esperar-ci\n")
+        self.assertIn("   quando: esperar o CI de um pull request terminar\n", saida)
+        self.assertIn("   rode: gh pr checks <pr> --watch --fail-fast\n", saida)
+        self.assertIn("   perigo: rode em background\n", saida)
 
     def test_json_segue_o_contrato_da_busca(self):
         _c, saida = self.cli("how", "esperar CI pull request terminar", "--json")

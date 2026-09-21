@@ -111,6 +111,10 @@ class TesteSementesDeReceita(CasoComLedger):
         _c, saida = self.cli("seed", "--list", "--json")
         self.assertEqual(len(json.loads(saida)["receitas"]), 5)
 
+    def test_seed_humano_conta_as_receitas(self):
+        _c, saida = self.cli("seed")
+        self.assertIn("receitas: 0 novas (total 5)", saida)
+
     def test_toda_regex_de_semente_passa_pela_guarda(self):
         from erratum.receitas import GuardaDeRegex
         from erratum.sementes import Semeador
