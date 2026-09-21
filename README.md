@@ -1,11 +1,66 @@
 # erratum
 
-Prova que a correção conserta, sem modelo no meio, e guarda a correção para o erro não ser resolvido duas vezes.
+Não é memória. É um portão que **prova que a correção conserta**, e um caderno local para o mesmo
+erro **não ser resolvido duas vezes**. Sem modelo no meio: Python 3.9+, stdlib, um SQLite.
 
-## O problema
+O agente diz que consertou. O teste passa. E o teste passaria igual sem a correção. O diff entra, o
+erro volta na semana seguinte. O `erratum` existe para essa falha.
 
-O agente diz que consertou. O teste passa. E o teste passaria igual sem a correção: ele nunca
-exercitou o defeito. O diff entra, o erro volta na semana seguinte.
+## O que é, o que não é
+
+| quer | use | não use erratum |
+|---|---|---|
+| o teste novo falharia sem o patch | **erratum** (`gate fix-noop`) | pytest sozinho (verde não prova o defeito) |
+| o mesmo log de CI não ser investigado de novo | **erratum** (`err` / `fix` / `find`) | Sentry (produção, não o loop do agente) |
+| o agente parar de improvisar `sleep` + `gh pr checks` | **erratum** (`check-cmd` / receitas) | um parágrafo no AGENTS.md (some no contexto) |
+| diário automático da sessão | [claude-mem](https://github.com/thedotmack/claude-mem) | erratum não captura sessão |
+| fato curado ("este repo usa pnpm") | [memoro](https://github.com/victorandraad/memoro) | erratum recusa ser memória geral |
+
+## Instalar
+
+Python 3.9+ e SQLite com FTS5 (vem no Python da maioria das distros):
+
+```sh
+python3 -c "import sqlite3; sqlite3.connect(':memory:').execute('create virtual table t using fts5(x)'); print('FTS5 ok')"
+```
+
+```sh
+git clone https://github.com/victorandraad/erratum.git
+cd erratum
+export PYTHONPATH="$PWD"
+python3 -m erratum seed          # correções e receitas genéricas (idempotente)
+python3 -m unittest              # a suíte tem de passar
+```
+
+Comando global (opcional):
+
+```sh
+pipx install git+https://github.com/victorandraad/erratum.git
+# ou, num venv: pip install git+https://github.com/victorandraad/erratum.git
+```
+
+O pacote no índice, quando existir, se chama `erratum-cli` (o nome `erratum` já tinha dono). O
+comando continua `erratum` e o import continua `import erratum`.
+
+## Contribuir
+
+PRs são bem-vindos. Teste que falha primeiro, depois a implementação. Sem dependência nova se a
+stdlib der conta.
+
+```sh
+python3 -m unittest
+cp hooks/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
+```
+
+O que ajuda de verdade: um caso em que o `fix-noop` deixou passar um teste frouxo, uma receita
+genérica que o agente improvisa sempre, um `find` que chutou quando deveria `abstain`. Detalhes em
+[CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Licença
+
+[GPL-3.0-or-later](LICENSE). Pode usar, modificar e distribuir. Se distribuir um derivado, o código
+dele também fica sob a GPL: a ideia continua pública. Sem modelo no meio, sem telemetria, o ledger
+mora na sua máquina.
 
 ## O portão
 
@@ -62,24 +117,6 @@ quando usar e o que ela substitui; conhecimento solto não entra.
 - **Correção presa a teste**: `fix --test` aponta o teste de regressão, e o `fix-noop` prova que ele falha sem a correção.
 - **Sabe dizer não sei**: todo achado sai como `match` ou `talvez`; abaixo do piso a resposta é `abstain` ([docs/busca-e-juiz.md](docs/busca-e-juiz.md)).
 - **Mede o próprio efeito**: cada pista mostrada é registrada, o desfecho da task fecha a conta, e `erratum efeito` compara quem recebeu `match` com quem ficou sem pista.
-
-## Instalar
-
-Requisitos: Python 3.9+ e SQLite com FTS5 (vem no Python de quase toda distribuição). Confira:
-
-```sh
-python3 -c "import sqlite3; sqlite3.connect(':memory:').execute('create virtual table t using fts5(x)'); print('FTS5 ok')"
-```
-
-```sh
-pipx install git+https://github.com/<org>/erratum     # recomendado: comando global `erratum`
-pip install git+https://github.com/<org>/erratum      # dentro de um venv
-pipx install erratum-cli                               # pelo índice, quando a versão estiver publicada
-git clone https://github.com/<org>/erratum && PYTHONPATH=$PWD/erratum python3 -m erratum top   # sem instalar
-```
-
-O pacote no índice se chama `erratum-cli` (o nome `erratum` já tinha dono); o comando continua
-`erratum` e o import continua `import erratum`.
 
 Primeiro uso: semeie o ledger.
 
@@ -270,3 +307,4 @@ python -m unittest
 ```
 
 Como contribuir e como proteger os termos privados do seu fork: [CONTRIBUTING.md](CONTRIBUTING.md).
+Licença: [GPL-3.0-or-later](LICENSE).

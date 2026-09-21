@@ -1,6 +1,7 @@
 # Contribuindo
 
-Python 3.9+, só biblioteca padrão. Teste que falha primeiro, depois a implementação.
+PRs abertos. Python 3.9+, só biblioteca padrão. Teste que falha primeiro, depois a implementação.
+Licença [GPL-3.0-or-later](LICENSE): o derivado distribuído continua GPL.
 
 ```sh
 python -m unittest
