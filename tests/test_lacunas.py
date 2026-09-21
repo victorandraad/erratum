@@ -139,9 +139,9 @@ class TestPortaoQueSoPula(CasoComLedger):
     def setUp(self):
         super().setUp()
         for _ in range(3):
-            self.ledger.registrar_portao("fix-noop", "skipped", "sem runner", "acme")
-        self.ledger.registrar_portao("em-dash", "passed", "", "acme")
-        self.ledger.registrar_portao("em-dash", "skipped", "", "acme")
+            self.ledger.registrar_portao("fix-noop", "pulou", "sem runner", "acme")
+        self.ledger.registrar_portao("em-dash", "aprovou", "", "acme")
+        self.ledger.registrar_portao("em-dash", "pulou", "", "acme")
 
     def test_saida_humana_marca_o_portao_que_nunca_decide(self):
         _, saida = self.cli("top")

@@ -325,7 +325,7 @@ class RepositorioDePortoes:
                 COUNT(*) AS rodadas,
                 SUM(CASE WHEN verdict = 'reprovou' THEN 1 ELSE 0 END)
                     AS reprovou,
-                SUM(CASE WHEN verdict IN ('pulou', 'skipped') THEN 1 ELSE 0 END)
+                SUM(CASE WHEN verdict = 'pulou' THEN 1 ELSE 0 END)
                     AS pulou
             FROM gate_runs
             """
