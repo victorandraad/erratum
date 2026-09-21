@@ -26,9 +26,15 @@ def _envelhecer(banco):
 
 class TestReindex(CasoComLedger):
     def _semear(self):
-        self.ledger.registrar_erro("conflito ao mergear feat/a em develop", "acme", com_pistas=False)
-        self.ledger.registrar_erro("conflito ao mergear feat/b em principal", "acme", com_pistas=False)
-        self.ledger.registrar_erro("timeout 30s", "acme", com_pistas=False)
+        # tasks distintas: o contador de repeticao so colapsa o mesmo escopo
+        self.ledger.registrar_erro(
+            "conflito ao mergear feat/a em develop", "acme",
+            contexto={"task": "t1"}, com_pistas=False)
+        self.ledger.registrar_erro(
+            "conflito ao mergear feat/b em principal", "acme",
+            contexto={"task": "t2"}, com_pistas=False)
+        self.ledger.registrar_erro(
+            "timeout 30s", "acme", contexto={"task": "t3"}, com_pistas=False)
         _envelhecer(self.banco)
         # correção presa à assinatura ANTIGA do erro 1, como num banco real pré-regra
         with self.banco.transacao() as con:
@@ -133,8 +139,10 @@ class TestCliReindex(CasoComLedger):
         return cli.executar(list(argv)), saida.getvalue(), aviso.getvalue()
 
     def test_reindex_imprime_antes_e_depois(self):
-        self.ledger.registrar_erro("push em feat/a", "acme", com_pistas=False)
-        self.ledger.registrar_erro("push em feat/b", "acme", com_pistas=False)
+        self.ledger.registrar_erro(
+            "push em feat/a", "acme", contexto={"task": "t1"}, com_pistas=False)
+        self.ledger.registrar_erro(
+            "push em feat/b", "acme", contexto={"task": "t2"}, com_pistas=False)
         _envelhecer(self.banco)
         codigo, saida = self.cli("reindex", "--dry-run")
         self.assertEqual(codigo, 0)

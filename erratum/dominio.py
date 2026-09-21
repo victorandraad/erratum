@@ -141,6 +141,13 @@ class Erro:
     assinatura: str
     texto: str
     contexto: dict
+    repeticoes: int = 1
+
+
+@dataclass(frozen=True)
+class ResumoCompactacao:
+    linhas_antes: int
+    linhas_depois: int
 
 
 @dataclass(frozen=True)

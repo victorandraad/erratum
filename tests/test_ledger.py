@@ -17,7 +17,10 @@ def _insere_em_lote(args):
     with Banco(caminho) as banco:
         ledger = Ledger.sobre(banco)
         for i in range(quantos):
-            ledger.registrar_erro("falha concorrente %d do processo %d" % (i, processo), "acme")
+            # letras: Assinatura troca digito por N, e o contador colapsa
+            # assinatura+escopo iguais. Aqui cada insert tem de ser linha propria.
+            marca = chr(65 + processo) + chr(65 + (i % 26)) + chr(65 + (i // 26))
+            ledger.registrar_erro("falha concorrente %s" % marca, "acme")
     return quantos
 
 

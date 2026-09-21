@@ -4,7 +4,15 @@ import json
 import sqlite3
 from dataclasses import replace
 
-from erratum.dominio import Acerto, Correcao, Erro, Padrao, TaxaDePortao, VereditoDePortao
+from erratum.dominio import (
+    Acerto,
+    Correcao,
+    Erro,
+    Padrao,
+    ResumoCompactacao,
+    TaxaDePortao,
+    VereditoDePortao,
+)
 
 
 class RepositorioDeErros:
@@ -34,8 +42,8 @@ class RepositorioDeErros:
                     """
                     INSERT INTO errors(
                         ts, project, kind, stage, tool, signature, text,
-                        context_json, import_key
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        context_json, import_key, repetitions
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         erro.ts,
@@ -47,6 +55,7 @@ class RepositorioDeErros:
                         erro.texto,
                         contexto_json,
                         chave_importacao,
+                        max(int(erro.repeticoes or 1), 1),
                     ),
                 )
                 novo_id = cur.lastrowid
@@ -57,7 +66,7 @@ class RepositorioDeErros:
                     """,
                     (erro.assinatura, erro.texto, "", "error:%d" % novo_id),
                 )
-            return replace(erro, id=novo_id), True
+            return replace(erro, id=novo_id, repeticoes=max(int(erro.repeticoes or 1), 1)), True
         except sqlite3.IntegrityError:
             if not chave_importacao:
                 raise
@@ -65,6 +74,76 @@ class RepositorioDeErros:
             if existente is None:
                 raise
             return existente, False
+
+    def ultimo_do_escopo(self, projeto, task=""):
+        task = task or ""
+        linhas = self._banco.consultar(
+            """
+            SELECT * FROM errors
+            WHERE project = ?
+              AND COALESCE(NULLIF(json_extract(context_json, '$.task'), ''), '') = ?
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            (projeto, task),
+        )
+        if not linhas:
+            return None
+        return self._de_linha(linhas[0])
+
+    def incrementar(self, id_erro, ts):
+        with self._banco.transacao() as con:
+            con.execute(
+                """
+                UPDATE errors
+                SET repetitions = COALESCE(repetitions, 1) + 1, ts = ?
+                WHERE id = ?
+                """,
+                (ts, id_erro),
+            )
+        return self.por_id(id_erro)
+
+    def compactar(self, projeto, dry_run=False):
+        linhas = [
+            self._de_linha(l)
+            for l in self._banco.consultar(
+                "SELECT * FROM errors WHERE project = ? ORDER BY ts, id",
+                (projeto,),
+            )
+        ]
+        grupos = {}
+        for erro in linhas:
+            chave = (erro.assinatura, (erro.contexto or {}).get("task") or "")
+            grupos.setdefault(chave, []).append(erro)
+        resumo = ResumoCompactacao(
+            linhas_antes=len(linhas), linhas_depois=len(grupos)
+        )
+        if dry_run:
+            return resumo
+        with self._banco.transacao() as con:
+            for membros in grupos.values():
+                if len(membros) == 1:
+                    continue
+                viva = membros[0]
+                total = sum(max(int(e.repeticoes or 1), 1) for e in membros)
+                con.execute(
+                    """
+                    UPDATE errors
+                    SET repetitions = ?, ts = ?
+                    WHERE id = ?
+                    """,
+                    (total, viva.ts, viva.id),
+                )
+                for morto in membros[1:]:
+                    con.execute("DELETE FROM errors WHERE id = ?", (morto.id,))
+                    con.execute(
+                        "DELETE FROM ledger_fts WHERE src = ?",
+                        ("error:%d" % morto.id,),
+                    )
+                    con.execute(
+                        "DELETE FROM pistas WHERE erro_id = ?", (morto.id,)
+                    )
+        return resumo
 
     def por_id(self, id_erro):
         linhas = self._banco.consultar(
@@ -114,7 +193,7 @@ class RepositorioDeErros:
             """
             SELECT
                 signature AS assinatura,
-                COUNT(*) AS ocorrencias,
+                SUM(COALESCE(repetitions, 1)) AS ocorrencias,
                 COUNT(
                     DISTINCT NULLIF(json_extract(context_json, '$.task'), '')
                 ) AS tasks,
@@ -159,6 +238,7 @@ class RepositorioDeErros:
             assinatura=linha["signature"] or "",
             texto=linha["text"] or "",
             contexto=contexto,
+            repeticoes=int(linha["repetitions"] or 1) if "repetitions" in linha.keys() else 1,
         )
 
 

@@ -11,6 +11,10 @@ license = { text = "MIT" }
 requires-python = ">=3.9"
 dependencies = []
 
+[project.urls]
+Homepage = "https://github.com/victorandraad/erratum"
+Issues = "https://github.com/victorandraad/erratum/issues"
+
 [project.scripts]
 erratum = "erratum.cli:main"
 

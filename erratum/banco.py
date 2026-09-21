@@ -21,7 +21,8 @@ _SCHEMA = (
         signature TEXT,
         text TEXT,
         context_json TEXT,
-        import_key TEXT UNIQUE
+        import_key TEXT UNIQUE,
+        repetitions INTEGER NOT NULL DEFAULT 1
     )
     """,
     """
@@ -190,6 +191,7 @@ class Banco:
                     raise
         self._migrar_coluna(con, "fixes", "receita", "TEXT")
         self._migrar_coluna(con, "usos_de_receita", "import_key", "TEXT")
+        self._migrar_coluna(con, "errors", "repetitions", "INTEGER NOT NULL DEFAULT 1")
         try:
             con.execute(
                 "CREATE UNIQUE INDEX IF NOT EXISTS "

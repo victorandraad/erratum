@@ -819,6 +819,25 @@ class ComandoCheckCmd(Comando):
         return 1 if resultado.tipo == "desvio" else 0
 
 
+class ComandoCompactar(Comando):
+    nome = "compactar"
+
+    def configurar(self, parser):
+        parser.add_argument("--dry-run", action="store_true")
+
+    def executar(self, args, ledger):
+        r = ledger.compactar(args.project, dry_run=args.dry_run)
+        if args.json:
+            self._escrever_json(asdict(r))
+            return 0
+        extra = " (simulado)" if args.dry_run else ""
+        self._saida.write(
+            "compactar%s: %d -> %d linhas\n"
+            % (extra, r.linhas_antes, r.linhas_depois)
+        )
+        return 0
+
+
 class ComandoReindex(Comando):
     nome = "reindex"
 
@@ -900,6 +919,7 @@ class Cli:
                 ComandoImport(self._entrada, self._saida, aviso=self._aviso),
                 ComandoSeed(self._entrada, self._saida, aviso=self._aviso),
                 ComandoReindex(self._entrada, self._saida, aviso=self._aviso),
+                ComandoCompactar(self._entrada, self._saida, aviso=self._aviso),
                 ComandoDesfecho(self._entrada, self._saida, aviso=self._aviso),
                 ComandoEfeito(self._entrada, self._saida, aviso=self._aviso),
                 ComandoRecipe(self._entrada, self._saida, aviso=self._aviso),

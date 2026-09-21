@@ -32,6 +32,9 @@ O ledger registra o erro, guarda a correção pela **assinatura** do erro e a de
 reaparece. `err` ao falhar, `fix` ao resolver, `find` para consultar. Quando não há nada parecido
 com confiança, ele diz isso em vez de chutar. Python puro (stdlib), um SQLite.
 
+A mesma falha reemitida no mesmo card não vira mil linhas: a linha ganha um contador. Histórico
+já inflado (import antigo, esteira que polia): `erratum compactar` (`--dry-run` primeiro).
+
 ## E não improvise o que já tem comando
 
 O agente refaz na mão o que um script já faz: cada vez de um jeito, cada jeito com a sua taxa de
@@ -69,10 +72,10 @@ python3 -c "import sqlite3; sqlite3.connect(':memory:').execute('create virtual 
 ```
 
 ```sh
-pipx install git+https://github.com/<org>/erratum     # recomendado: comando global `erratum`
-pip install git+https://github.com/<org>/erratum      # dentro de um venv
+pipx install git+https://github.com/victorandraad/erratum     # recomendado: comando global `erratum`
+pip install git+https://github.com/victorandraad/erratum      # dentro de um venv
 pipx install erratum-cli                               # pelo índice, quando a versão estiver publicada
-git clone https://github.com/<org>/erratum && PYTHONPATH=$PWD/erratum python3 -m erratum top   # sem instalar
+git clone https://github.com/victorandraad/erratum && PYTHONPATH=$PWD/erratum python3 -m erratum top   # sem instalar
 ```
 
 O pacote no índice se chama `erratum-cli` (o nome `erratum` já tinha dono); o comando continua

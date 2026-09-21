@@ -165,6 +165,10 @@ class Ledger:
         erro = self._montar_erro(
             texto, projeto, tipo, etapa, ferramenta, contexto, ts
         )
+        if not chave_importacao:
+            ultimo = self._erros.ultimo_do_escopo(projeto, task)
+            if ultimo is not None and ultimo.assinatura == erro.assinatura:
+                return self._erros.incrementar(ultimo.id, erro.ts), pistas
         gravado = self._erros.inserir(erro, chave_importacao=chave_importacao)
         if com_pistas:
             self._gravar_pistas(decisao, projeto, task, erro_id=gravado.id)
@@ -197,6 +201,7 @@ class Ledger:
             assinatura=Assinatura(texto).valor,
             texto=texto,
             contexto=dict(contexto) if contexto else {},
+            repeticoes=1,
         )
 
     def erro(self, id_erro):
@@ -340,6 +345,9 @@ class Ledger:
             return (p.resolvido, -max(p.tasks, 1), -p.ocorrencias, p.assinatura)
 
         return sorted(padroes, key=chave)
+
+    def compactar(self, projeto, dry_run=False):
+        return self._erros.compactar(projeto, dry_run=dry_run)
 
     def taxa_de_portoes(self, projeto, dias=None):
         desde = None
