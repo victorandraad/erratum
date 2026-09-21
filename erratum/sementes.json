@@ -1,0 +1,272 @@
+[
+  {
+    "slug": "conflito-de-merge-na-branch-do-agente",
+    "erro": "PR com conflito de merge com a branch base. CONFLICT (content): Merge conflict in arquivo. Automatic merge failed; fix conflicts and then commit the result.",
+    "causa": "A branch do agente foi cortada de uma base antiga, ou várias tasks em paralelo mexem nos mesmos arquivos e cada merge move a base debaixo das outras.",
+    "correcao": "Traga a base fresca para a branch (git fetch e git merge origin/<base>) ainda no worktree, resolva o conflito ali e rode os testes antes de empurrar. Não deixe o conflito nascer só no servidor, onde resolver custa uma etapa inteira de agente.",
+    "prevencao": "Antes de cada etapa e antes de abrir o PR, integrar a base atual na branch; limitar o número de tentativas de resolução automática; serializar tasks que tocam os mesmos arquivos.",
+    "etapa": "integracao",
+    "tags": ["git", "merge", "paralelismo"]
+  },
+  {
+    "slug": "agente-terminou-sem-commit",
+    "erro": "Agente terminou a etapa sem gerar commits à frente da branch base: nada para revisar. nothing to commit, working tree clean. Your branch is up to date.",
+    "causa": "O agente editou e esqueceu de commitar, trabalhou em outro diretório, concluiu que não havia nada a fazer sem dizer isso, ou teve a mudança revertida por um hook.",
+    "correcao": "Confira git status e git log <base>..HEAD no worktree. Se há edição solta, commite por caminho explícito; se não há nada, trate como 'nada a fazer' com motivo escrito, não como sucesso.",
+    "prevencao": "Guard de branch vazia (commits à frente da base igual a zero) logo depois da etapa de implementação e antes da revisão, para não gastar revisão em diff vazio.",
+    "etapa": "dev",
+    "tags": ["git", "agente", "guard"]
+  },
+  {
+    "slug": "revisao-reprova-em-loop",
+    "erro": "Revisão (QA) reprovou de novo a mesma entrega: dev vai corrigir outra vez. Rodadas de correção esgotadas sem aprovação.",
+    "causa": "O revisor pede algo que o implementador não entende ou que contradiz o plano, e cada rodada paga os dois agentes de novo sem convergir.",
+    "correcao": "Pare na segunda reprovação: leia o motivo literal da revisão, decida quem está certo e devolva uma instrução única e verificável (arquivo, comportamento esperado, teste). Se o plano está errado, refaça o plano, não a implementação.",
+    "prevencao": "Teto fixo de rodadas de revisão; portões determinísticos (lint, teste de regressão, fix-noop) antes do revisor, para ele não gastar rodada com o que uma máquina acusa de graça.",
+    "etapa": "qa",
+    "tags": ["revisao", "custo", "loop"]
+  },
+  {
+    "slug": "orcamento-da-task-estourado",
+    "erro": "Orçamento da task estourado: custo acumulado passou do teto, execução parou para não drenar tokens. budget exceeded.",
+    "causa": "Task grande demais para uma execução, ou loop de retry (revisão, CI, conflito) somando custo sem progresso. É a classe com maior custo médio por task.",
+    "correcao": "Não aumente o teto às cegas. Veja em que etapa o custo foi gasto: se foi retry, conserte a causa do retry; se a task é grande, quebre em tasks menores com dependência explícita e retome a partir do que já está commitado.",
+    "prevencao": "Teto por natureza de task, freio também na etapa de implementação (não só no total), e contagem de tentativas por etapa com parada terminal em vez de recomeço automático.",
+    "etapa": "orquestracao",
+    "tags": ["custo", "loop", "teto"]
+  },
+  {
+    "slug": "ci-vermelho-persistente",
+    "erro": "CI segue vermelho após N tentativas de conserto automático: precisa de um humano. checks failing.",
+    "causa": "O conserto automático recebe só 'falhou' sem o log do job, ou a falha não é do diff (teste instável, base já vermelha, ambiente do CI diferente do local).",
+    "correcao": "Baixe o log do job que falhou e reproduza localmente com o mesmo comando do workflow antes de tentar de novo. Confira se a base está verde: base vermelha não se conserta na branch.",
+    "prevencao": "Rodar a suíte localmente, com o comando do CI, antes do push; contar só tentativas reais de conserto, com piso de uma e teto fixo; passar o trecho do log ao agente, não só o nome do check.",
+    "etapa": "ci",
+    "tags": ["ci", "retry"]
+  },
+  {
+    "slug": "ci-vermelho-por-infra",
+    "erro": "CI vermelho sem veredito sobre o código: job cancelled, timed out, stale. The runner has received a shutdown signal. The self-hosted runner lost communication with the server. The job was not started because of a billing issue, spending limit.",
+    "causa": "Falha de infraestrutura do CI (runner caiu, fila, cobrança, cancelamento por push novo) lida como reprovação do código.",
+    "correcao": "Trate cancelado, expirado e sem runner como 'sem veredito': rode o job de novo (gh run rerun --failed) e não acione agente para consertar código que ninguém julgou.",
+    "prevencao": "Classificar a conclusão do check antes de reagir: só failure com log de teste vira conserto; cancelled, timed_out, stale e erro de cobrança viram nova execução ou alerta de infra.",
+    "etapa": "ci",
+    "tags": ["ci", "infra", "runner"]
+  },
+  {
+    "slug": "worktree-sumiu",
+    "erro": "Worktree não existe mais: recomece do zero. fatal: not a git repository (or any of the parent directories). fatal: cannot change to 'dir': No such file or directory. fatal: 'dir' is not a working tree.",
+    "causa": "Uma faxina de temporários ou um reboot apagou o worktree de uma task ainda viva, ou a limpeza decidiu pelo tempo do diretório sem consultar o estado da task.",
+    "correcao": "Se a branch foi empurrada ou ainda existe localmente, recrie o worktree a partir dela (git worktree prune e git worktree add <dir> <branch>) em vez de recomeçar. Sem branch, o trabalho não commitado se perdeu: recomece.",
+    "prevencao": "A faxina consulta o estado das tasks e só apaga worktree de task terminal; commit cedo e frequente; checar a existência do worktree no início de cada etapa, com falha clara.",
+    "etapa": "orquestracao",
+    "tags": ["git", "worktree", "limpeza"]
+  },
+  {
+    "slug": "tarefa-duplicada-de-outra-concluida",
+    "erro": "Tarefa parecida com outra já concluída: o mesmo objetivo já foi entregue na branch base. Se voltou, algo não deu certo da primeira vez.",
+    "causa": "O mesmo problema é reaberto por um coletor automático (erro de produção, alerta) ou por pessoas diferentes, e só uma etapa cara descobre que já estava resolvido.",
+    "correcao": "Antes de planejar, procure a entrega anterior (git log --grep, PRs fechados). Se já está na base, feche como duplicada citando o commit; se voltou de verdade, a task nova é 'por que a correção anterior não segurou', com o teste de regressão que faltou.",
+    "prevencao": "Checagem barata de 'já entregue' na triagem, antes do planejamento; coletor de erros com janela de tempo e deduplicação por assinatura.",
+    "etapa": "triagem",
+    "tags": ["triagem", "duplicata", "custo"]
+  },
+  {
+    "slug": "push-rejeitado-non-fast-forward",
+    "erro": "git push falhou: ! [rejected] branch -> branch (non-fast-forward). error: failed to push some refs. hint: Updates were rejected because the tip of your current branch is behind its remote counterpart. hint: use 'git pull' before pushing again.",
+    "causa": "Outro processo (conserto de CI, atualização da base, outra sessão do agente) empurrou na mesma branch entre o seu fetch e o seu push.",
+    "correcao": "git fetch e git rebase origin/<branch> (ou merge), rode os testes e empurre de novo. Force só com --force-with-lease e só em branch que é sua.",
+    "prevencao": "Um único escritor por branch: trava por task em volta de qualquer etapa que empurra; sempre fetch imediatamente antes do push.",
+    "etapa": "push",
+    "tags": ["git", "push", "concorrencia"]
+  },
+  {
+    "slug": "git-cannot-lock-ref",
+    "erro": "git fetch falhou: error: cannot lock ref 'refs/remotes/origin/branch': is at aaaa but expected bbbb. error: some local refs could not be updated; try running 'git remote prune origin'.",
+    "causa": "Dois git fetch simultâneos no mesmo repositório (worktrees compartilham as refs), ou ref remota apagada e recriada.",
+    "correcao": "É transitório: repita o fetch depois de um intervalo curto. Se persistir, git remote prune origin e, por último, git gc --prune=now.",
+    "prevencao": "Serializar fetch por repositório com uma trava; retry com recuo para falha mecânica de git, sem chamar humano nem classificar como conflito.",
+    "etapa": "git",
+    "tags": ["git", "fetch", "concorrencia", "transitorio"]
+  },
+  {
+    "slug": "git-dubious-ownership",
+    "erro": "fatal: detected dubious ownership in repository at 'dir'. To add an exception for this directory, call: git config --global --add safe.directory dir",
+    "causa": "O processo roda com um usuário diferente do dono do diretório (daemon, container, sudo), e o git recusa por segurança.",
+    "correcao": "Rode o agente com o mesmo usuário dono do repositório. Se não der, registre o diretório: git config --global --add safe.directory <dir>, no gitconfig do usuário que executa.",
+    "prevencao": "Definir o usuário e o HOME do serviço explicitamente; ambiente crítico (HOME, GIT_CONFIG_GLOBAL) definido na subida do processo, valendo para todo subprocesso.",
+    "etapa": "git",
+    "tags": ["git", "permissao", "daemon"]
+  },
+  {
+    "slug": "limite-de-uso-do-provedor",
+    "erro": "You've hit your session limit, resets 5pm (UTC). rate_limit_error: 429 Too Many Requests. overloaded_error. Etapa sem resultado por limite de uso do provedor do modelo.",
+    "causa": "A janela de uso do plano ou o limite de requisições acabou no meio da etapa. Não é defeito da task nem do código.",
+    "correcao": "Não marque como falha nem gaste tentativa: pause a fila até o horário de reset informado e retome a mesma etapa de onde parou.",
+    "prevencao": "Detectar o limite pelos dois formatos (evento estruturado de rate limit e a mensagem em texto); estado próprio de 'pausado por limite' que religa sozinho; reduzir concorrência perto do teto.",
+    "etapa": "orquestracao",
+    "tags": ["provedor", "rate-limit", "transitorio"]
+  },
+  {
+    "slug": "etapa-sem-saida",
+    "erro": "Etapa não retornou saída (timeout ou erro no agente). no_result. Killed. Out of memory: Killed process.",
+    "causa": "O processo do agente foi morto (falta de memória com muitas tasks ou builds em paralelo, timeout do orquestrador) antes de escrever o resultado.",
+    "correcao": "Veja dmesg ou journalctl por OOM e o tempo gasto contra o timeout. Retome a etapa no mesmo worktree, porque o que foi commitado continua lá; reduza a concorrência se foi memória.",
+    "prevencao": "Admissão de trabalho por orçamento de memória e não por contagem fixa; timeout por etapa com motivo gravado; resultado parcial persistido em commit, não só na resposta final.",
+    "etapa": "orquestracao",
+    "tags": ["timeout", "memoria", "agente"]
+  },
+  {
+    "slug": "dependencias-ausentes-no-worktree",
+    "erro": "Exit code 1: vendor/autoload.php: No such file or directory. Error: Cannot find module 'x'. ModuleNotFoundError: No module named 'x'. sh: 1: eslint: not found. File does not exist: .env",
+    "causa": "Worktree novo só tem o que está versionado: dependências instaladas, arquivo de ambiente e artefatos de build não vêm junto.",
+    "correcao": "Prepare o worktree antes do primeiro agente tocar nele: instale as dependências pelo lockfile (npm ci, composer install, pip install -r) e copie o arquivo de ambiente de exemplo.",
+    "prevencao": "Passo de preparo obrigatório na criação do worktree. Copie as dependências (cp -a), nunca por symlink: o autoload resolve o link e carrega código do repositório original, e o lock de um projeto não casa com o de outro.",
+    "etapa": "preparo",
+    "tags": ["worktree", "dependencias", "ambiente"]
+  },
+  {
+    "slug": "pr-ja-existe-para-a-branch",
+    "erro": "gh pr create falhou: pull request create failed: GraphQL: A pull request already exists for owner:branch.",
+    "causa": "A task foi retomada ou reaprovada e tentou abrir um segundo PR para a mesma branch.",
+    "correcao": "Reaproveite o PR aberto: gh pr list --head <branch> --state open devolve o número; empurre os commits novos e atualize a descrição com gh pr edit.",
+    "prevencao": "Pré-checagem barata antes de gh pr create: a branch existe no remoto, tem commits à frente da base e não tem PR aberto. Guardar o número do PR no estado da task.",
+    "etapa": "pr",
+    "tags": ["github", "pr", "idempotencia"]
+  },
+  {
+    "slug": "cli-do-github-sem-autenticacao",
+    "erro": "gh pr create falhou: To get started with GitHub CLI, please run: gh auth login. Alternatively, populate the GH_TOKEN environment variable with a GitHub API authentication token.",
+    "causa": "O processo roda com outro usuário ou outro HOME (cron, systemd, container) e não enxerga a credencial que existe no seu shell.",
+    "correcao": "Exporte GH_TOKEN no ambiente do serviço (arquivo de ambiente com permissão restrita), ou rode gh auth login com o mesmo usuário e HOME do serviço. Confirme com gh auth status dentro do serviço.",
+    "prevencao": "Checagem de saúde na subida do orquestrador: gh auth status e git ls-remote precisam passar antes de aceitar a primeira task.",
+    "etapa": "pr",
+    "tags": ["github", "credencial", "cron"]
+  },
+  {
+    "slug": "comando-nao-encontrado-no-cron",
+    "erro": "Exit code 127: command not found. /bin/sh: 1: gh: not found. env: 'node': No such file or directory. Funciona no terminal e falha no cron ou no systemd.",
+    "causa": "cron e systemd rodam com PATH mínimo, sem os diretórios de binários do usuário (~/.local/bin, gerenciadores de versão).",
+    "correcao": "Defina o PATH completo no próprio serviço (Environment= no unit, PATH= no topo do crontab) ou reinjete os diretórios na subida do programa, antes do primeiro subprocesso.",
+    "prevencao": "Teste que roda o ponto de entrada com env -i e verifica que os binários externos são encontrados; falhar alto na subida em vez de morrer mudo no primeiro comando.",
+    "etapa": "ambiente",
+    "tags": ["path", "cron", "systemd"]
+  },
+  {
+    "slug": "teste-passa-sem-a-correcao",
+    "erro": "Teste de regressão passa mesmo com o código de produção revertido: a correção é no-op ou o teste passa sempre. Bug voltou depois de um fix com teste verde.",
+    "causa": "O teste foi escrito depois da correção e nunca foi visto falhando, ou exercita um caminho que não é o do bug.",
+    "correcao": "Reverta só o código de produção do commit e rode os testes do diff: têm de falhar. Se passam, reescreva o teste até ele falhar sem a correção, e só então reaplique.",
+    "prevencao": "Portão determinístico antes da revisão: erratum gate fix-noop --base <base> --test-cmd \"<runner> {testes}\".",
+    "etapa": "dev",
+    "tags": ["teste", "tdd", "portao"]
+  },
+  {
+    "slug": "stub-que-devolve-vazio",
+    "erro": "Classe nova cumpre o contrato devolvendo constante neutra (lista vazia, null, zero) em todos os métodos sem consultar fonte nenhuma. A tela mostra 'sem dados' quando ninguém mediu.",
+    "causa": "O agente satisfez a interface e os testes com um stub, e o consumidor lê o vazio como veredito.",
+    "correcao": "Implemente a consulta real, ou falhe alto (exceção de não implementado) em vez de devolver vazio. Se é um Null Object de propósito, dê esse nome à classe.",
+    "prevencao": "Portão determinístico: erratum gate stub-neutro --base <base>. Teste de contrato com dado real que exige retorno não vazio.",
+    "etapa": "dev",
+    "tags": ["stub", "portao", "contrato"]
+  },
+  {
+    "slug": "git-checkout-depois-de-add",
+    "erro": "git checkout -- arquivo não desfez a mudança depois de git add: o arquivo continua alterado. Reversão automática deixou o índice sujo.",
+    "causa": "git checkout -- <arquivo> restaura a partir do índice, não do HEAD. Depois de git add, o índice já tem a versão nova.",
+    "correcao": "Restaure índice e worktree a partir do HEAD: git restore --source=HEAD --staged --worktree -- <arquivo> (ou git reset -q HEAD -- <arquivo> seguido de git checkout HEAD -- <arquivo>).",
+    "prevencao": "Todo caminho de 'desfazer' em automação usa a forma com HEAD explícito, com teste que faz add, desfaz e confere git status limpo.",
+    "etapa": "git",
+    "tags": ["git", "indice", "reversao"]
+  },
+  {
+    "slug": "timeout-do-gerenciador-de-pacotes",
+    "erro": "The process \"comando\" exceeded the timeout of 300 seconds. Script de deploy ou de testes morre sem nenhum FAILED no log.",
+    "causa": "O gerenciador de pacotes impõe um teto de tempo aos scripts que ele mesmo dispara (no Composer, 300 segundos por padrão), e mata suíte longa ou deploy no meio.",
+    "correcao": "Rode o processo longo direto, fora do script do gerenciador, ou desligue o teto: COMPOSER_PROCESS_TIMEOUT=0, ou Composer\\Config::disableProcessTimeout no script.",
+    "prevencao": "No CI, chamar o runner de teste diretamente. Log que termina em 'exceeded the timeout' sem teste falhando é classificado como infra, não como reprovação.",
+    "etapa": "ci",
+    "tags": ["timeout", "composer", "ci"]
+  },
+  {
+    "slug": "git-since-com-data-sem-hora",
+    "erro": "git log --since=2026-01-05 omite commits do próprio dia: relatório por período vem com commits faltando.",
+    "causa": "Data sem hora em --since e --until é completada com a hora atual, não com meia-noite.",
+    "correcao": "Passe a hora explícita: git log --since=\"2026-01-05 00:00:00\" (e --until=\"2026-01-05 23:59:59\").",
+    "prevencao": "Normalizar a data para início do dia antes de montar o comando, com teste usando um commit datado de manhã e a consulta feita à tarde.",
+    "etapa": "git",
+    "tags": ["git", "data", "relatorio"]
+  },
+  {
+    "slug": "pipe-fechado-na-cli",
+    "erro": "BrokenPipeError: [Errno 32] Broken pipe. Exception ignored in: <_io.TextIOWrapper name='<stdout>'> ao rodar comando | head.",
+    "causa": "O leitor do pipe fechou antes de a CLI terminar de escrever, e o Python estoura de novo no flush de saída do interpretador.",
+    "correcao": "Capture BrokenPipeError no ponto de entrada, aponte o stdout para os.devnull com os.dup2 e saia com 0.",
+    "prevencao": "Teste que roda a CLI num subprocesso com o stdout fechado cedo e exige código 0 e stderr vazio.",
+    "etapa": "cli",
+    "tags": ["python", "cli", "pipe"]
+  },
+  {
+    "slug": "edicao-sem-leitura-previa",
+    "erro": "File has not been read yet. Read it first before writing to it. File has been modified since read, either by the user or by a linter.",
+    "causa": "A ferramenta de edição do agente exige leitura do arquivo na mesma sessão, e um formatador ou outro processo mudou o arquivo entre a leitura e a escrita.",
+    "correcao": "Releia o arquivo e repita a edição. Não conte como falha da task: é retry barato e esperado.",
+    "prevencao": "Não tente resolver com mais texto no prompt: é comportamento da ferramenta. Evite formatador automático rodando em paralelo no worktree do agente.",
+    "etapa": "dev",
+    "tags": ["agente", "ferramenta", "transitorio"]
+  },
+  {
+    "slug": "pergunta-do-agente-sem-operador",
+    "erro": "Agente ficou esperando resposta de uma pergunta e ninguém respondeu: etapa parada até o timeout, esperando input do operador.",
+    "causa": "Execução sem ninguém olhando (noite, fila longa) com um canal de pergunta que bloqueia para sempre.",
+    "correcao": "Responda com um fallback explícito: 'sem operador: aborte esta etapa com estado claro, não adivinhe'. Retome quando houver alguém para decidir.",
+    "prevencao": "Timeout no canal de pergunta com resposta padrão gravada e evento visível; uma pergunta por vez; pergunta só quando a dúvida muda o resultado.",
+    "etapa": "orquestracao",
+    "tags": ["agente", "operador", "timeout"]
+  },
+  {
+    "slug": "agente-delegou-em-background",
+    "erro": "Etapa encerrou com subagente ainda rodando em background: resultado perdido, nenhum commit, custo pago.",
+    "causa": "Em modo headless o processo termina quando o agente principal responde, e o trabalho delegado em segundo plano morre junto.",
+    "correcao": "Refaça a etapa com a delegação em primeiro plano (esperando o resultado) ou sem delegar.",
+    "prevencao": "Instrução explícita no prompt dos papéis headless proibindo background; guard de branch vazia pega o sintoma antes da revisão.",
+    "etapa": "dev",
+    "tags": ["agente", "headless", "custo"]
+  },
+  {
+    "slug": "argv-longo-demais",
+    "erro": "OSError: [Errno 7] Argument list too long ao chamar o agente ou o git com prompt, diff ou log no argv.",
+    "causa": "Conteúdo de tamanho aberto (diff, saída de teste) passado como argumento de linha de comando estoura o limite do sistema.",
+    "correcao": "Passe o conteúdo por stdin ou por arquivo temporário, nunca como elemento do argv.",
+    "prevencao": "Teste com entrada de alguns megabytes no caminho que monta o subprocesso.",
+    "etapa": "orquestracao",
+    "tags": ["subprocess", "limite"]
+  },
+  {
+    "slug": "lock-de-processo-morto",
+    "erro": "Ambiente ocupado, tente de novo: lock ocupado, mas o processo dono já morreu. Clique ou comando ignorado porque o lockfile existe.",
+    "causa": "A trava decide 'ocupado' pela existência ou pela idade do arquivo, e um crash deixou o lockfile para trás.",
+    "correcao": "Leia o PID gravado no lockfile: se o processo não existe mais (os.kill(pid, 0) falha), assuma a trava.",
+    "prevencao": "Trava viva equivale a PID dono vivo, nunca a mtime. Gravar o PID na aquisição, com teste que simula dono morto.",
+    "etapa": "orquestracao",
+    "tags": ["lock", "concorrencia", "crash"]
+  },
+  {
+    "slug": "processos-orfaos-depois-do-timeout",
+    "erro": "Timeout matou só o processo do agente: filhos (build, servidor de teste, runner) seguem rodando e consomem memória.",
+    "causa": "kill no PID direto não alcança os netos; sem grupo de processos próprio, eles ficam órfãos.",
+    "correcao": "Suba o agente com start_new_session=True e, no timeout, mate o grupo inteiro: os.killpg(os.getpgid(pid), signal.SIGKILL).",
+    "prevencao": "Teste que dispara um filho que dorme, força o timeout e verifica que nada do grupo sobreviveu.",
+    "etapa": "orquestracao",
+    "tags": ["processo", "timeout", "memoria"]
+  },
+  {
+    "slug": "auto-merge-com-check-pendente",
+    "erro": "Auto-merge entrou com CI vermelho: 'verde' era só o que já tinha reportado. Merge automático feito antes de todos os checks terminarem.",
+    "causa": "A decisão olhou apenas os checks concluídos; um check obrigatório ainda pendente, ou um repositório sem CI de PR, foi lido como aprovado.",
+    "correcao": "Reverta o merge se quebrou a base. Decida pelo estado agregado: todos os checks obrigatórios concluídos com sucesso e mergeStateStatus CLEAN.",
+    "prevencao": "Função pura de decisão com teste para: check pendente, check cancelado, nenhum check configurado. Prefira gh pr merge --auto com proteção de branch, que espera os obrigatórios.",
+    "etapa": "merge",
+    "tags": ["ci", "merge", "github"]
+  }
+]
