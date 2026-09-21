@@ -204,3 +204,7 @@ class Achado:
     texto: str
     correcoes: tuple
     pontuacao: float
+    veredito: str = "talvez"
+    confianca: float = 0.0
+    cobertura: float = 0.0
+    decidido_por: str = "limiar"

@@ -64,9 +64,25 @@ _SCHEMA = (
         tokenize='unicode61 remove_diacritics 2'
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS pistas (
+        id INTEGER PRIMARY KEY,
+        ts TEXT,
+        project TEXT,
+        task TEXT,
+        erro_id INTEGER,
+        correcao_id INTEGER,
+        origem TEXT,
+        veredito TEXT,
+        confianca REAL,
+        desfecho TEXT,
+        desfecho_ts TEXT
+    )
+    """,
     "CREATE INDEX IF NOT EXISTS idx_errors_signature ON errors(signature)",
     "CREATE INDEX IF NOT EXISTS idx_fixes_signature ON fixes(signature)",
     "CREATE INDEX IF NOT EXISTS idx_errors_project_ts ON errors(project, ts)",
+    "CREATE INDEX IF NOT EXISTS idx_pistas_project_task ON pistas(project, task)",
     """
     CREATE TABLE IF NOT EXISTS meta (
         key TEXT PRIMARY KEY,

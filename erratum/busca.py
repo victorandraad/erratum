@@ -1,13 +1,20 @@
 from __future__ import annotations
 
+import math
 import re
 import shlex
 import sqlite3
 import subprocess
 import sys
+import unicodedata
 from abc import ABC, abstractmethod
 
 from erratum.dominio import Achado, Assinatura
+
+
+def _dobrar(texto):
+    nfkd = unicodedata.normalize("NFKD", texto or "")
+    return "".join(c for c in nfkd if not unicodedata.combining(c)).lower()
 
 
 class Buscador(ABC):
@@ -33,6 +40,9 @@ class BuscaPorAssinatura(Buscador):
             texto=erros[0].texto if erros else "",
             correcoes=tuple(correcoes),
             pontuacao=1.0,
+            veredito="match",
+            confianca=1.0,
+            decidido_por="assinatura",
         )
         return [achado][:n]
 
@@ -57,14 +67,55 @@ class BuscaFTS(Buscador):
                 break
         return " OR ".join('"%s"' % t for t in tokens)
 
+    def _termos(self, texto):
+        vistos = set()
+        termos = []
+        for tok in self._TOKEN.findall(_dobrar(texto)):
+            if tok in vistos:
+                continue
+            vistos.add(tok)
+            termos.append(tok)
+            if len(termos) == 12:
+                break
+        return termos
+
+    def _idf(self, termos):
+        self._banco.consultar(
+            "CREATE VIRTUAL TABLE IF NOT EXISTS temp.ledger_voc "
+            "USING fts5vocab(main, ledger_fts, 'row')"
+        )
+        n_docs = self._banco.consultar("SELECT COUNT(*) AS n FROM ledger_fts")
+        N = int(n_docs[0]["n"] if n_docs else 0)
+        idfs = {}
+        for termo in termos:
+            linhas = self._banco.consultar(
+                "SELECT doc FROM temp.ledger_voc WHERE term = ?", (termo,)
+            )
+            n = int(linhas[0]["doc"]) if linhas else 0
+            idfs[termo] = math.log((N - n + 0.5) / (n + 0.5) + 1.0)
+        return idfs
+
+    @staticmethod
+    def _cobertura(linha, termos, idfs):
+        if not termos:
+            return 0.0
+        denom = sum(idfs[t] for t in termos)
+        if denom <= 0:
+            return 0.0
+        tokens = set(re.findall(r"\w+", _dobrar(linha)))
+        num = sum(idfs[t] for t in termos if t in tokens)
+        return num / denom
+
     def buscar(self, texto, n):
         consulta = self.consulta(texto)
         if not consulta:
             return []
+        termos = self._termos(texto)
         try:
+            idfs = self._idf(termos)
             linhas = self._banco.consultar(
                 """
-                SELECT signature, text, bm25(ledger_fts) AS rank
+                SELECT signature, text, note, bm25(ledger_fts) AS rank
                 FROM ledger_fts
                 WHERE ledger_fts MATCH ?
                 ORDER BY rank, rowid
@@ -79,6 +130,9 @@ class BuscaFTS(Buscador):
         for linha in linhas:
             assinatura = linha["signature"] or ""
             texto_linha = linha["text"] or ""
+            nota = linha["note"] or ""
+            corpo = " ".join((assinatura, texto_linha, nota))
+            cob = self._cobertura(corpo, termos, idfs)
             if assinatura not in indice:
                 indice[assinatura] = len(grupos)
                 grupos.append(
@@ -86,10 +140,13 @@ class BuscaFTS(Buscador):
                         "assinatura": assinatura,
                         "pontuacao": linha["rank"],
                         "texto": texto_linha,
+                        "cobertura": cob,
                     }
                 )
                 continue
             grupo = grupos[indice[assinatura]]
+            if cob > grupo["cobertura"]:
+                grupo["cobertura"] = cob
             if not grupo["texto"] and texto_linha:
                 grupo["texto"] = texto_linha
         achados = []
@@ -104,6 +161,7 @@ class BuscaFTS(Buscador):
                         self._correcoes.por_assinatura(grupo["assinatura"])
                     ),
                     pontuacao=0.0 if pontuacao is None else float(pontuacao),
+                    cobertura=grupo["cobertura"],
                 )
             )
         return achados

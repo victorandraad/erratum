@@ -76,13 +76,14 @@ class TestCliFind(CasoComLedger):
         self.cli("fix", "1", "prep do worktree", "--ref", "abc123")
         codigo, saida = self.cli("find", "bin/runner no such file")
         self.assertEqual(codigo, 0)
-        self.assertIn("1. [fts] exit code N /PATH: no such file", saida)
+        self.assertIn("1. [fts]", saida)
+        self.assertIn("exit code N /PATH: no such file", saida)
         self.assertIn("correção: prep do worktree [ref: abc123]", saida)
         self.assertEqual(self.banco.consultar("SELECT COUNT(*) FROM errors")[0][0], 1)
 
     def test_find_sem_achado(self):
         codigo, saida = self.cli("find", "segmentation fault")
-        self.assertEqual((codigo, saida.strip()), (0, "nada parecido no ledger"))
+        self.assertEqual((codigo, saida.strip()), (0, "nada parecido com confiança no ledger"))
 
     def test_find_json_stdin_e_limite(self):
         for nome in ("alfa", "beta", "gama"):

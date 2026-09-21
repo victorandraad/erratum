@@ -397,3 +397,70 @@ class RepositorioDePortoes:
             taxa=taxa,
             nunca_decidiu=rodadas > 0 and pulou == rodadas,
         )
+
+
+DESFECHOS = ("resolveu", "nao_resolveu", "descartado")
+
+
+class RepositorioDePistas:
+    def __init__(self, banco):
+        self._banco = banco
+
+    def inserir_varias(self, linhas):
+        if not linhas:
+            return
+        with self._banco.transacao() as con:
+            for linha in linhas:
+                con.execute(
+                    """
+                    INSERT INTO pistas(
+                        ts, project, task, erro_id, correcao_id, origem,
+                        veredito, confianca, desfecho, desfecho_ts
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        linha["ts"],
+                        linha["project"],
+                        linha["task"],
+                        linha["erro_id"],
+                        linha["correcao_id"],
+                        linha["origem"],
+                        linha["veredito"],
+                        linha["confianca"],
+                        linha["desfecho"],
+                        linha["desfecho_ts"],
+                    ),
+                )
+
+    def fechar(self, task, desfecho, desfecho_ts, projeto=None):
+        if not task:
+            raise ValueError("task vazia")
+        if desfecho not in DESFECHOS:
+            raise ValueError("desfecho invalido")
+        sql = (
+            "UPDATE pistas SET desfecho = ?, desfecho_ts = ?"
+            " WHERE task = ? AND desfecho IS NULL"
+        )
+        params = [desfecho, desfecho_ts, task]
+        if projeto is not None:
+            sql += " AND project = ?"
+            params.append(projeto)
+        with self._banco.transacao() as con:
+            cur = con.execute(sql, tuple(params))
+            return cur.rowcount
+
+    def listar(self, projeto=None, desde_ts=None):
+        condicoes = []
+        params = []
+        if projeto is not None:
+            condicoes.append("project = ?")
+            params.append(projeto)
+        if desde_ts is not None:
+            condicoes.append("ts >= ?")
+            params.append(desde_ts)
+        where = ""
+        if condicoes:
+            where = " WHERE " + " AND ".join(condicoes)
+        return self._banco.consultar(
+            "SELECT * FROM pistas" + where + " ORDER BY id", tuple(params)
+        )

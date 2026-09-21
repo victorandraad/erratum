@@ -1,0 +1,7 @@
+#!/bin/sh
+PY="${ERRATUM_PYTHON:-python3}"
+if ! "$PY" -c 'import erratum' >/dev/null 2>&1; then
+  echo "erratum não encontrado; hook ignorado" >&2
+  exit 0
+fi
+exec "$PY" -m erratum gate em-dash,stub-neutro --staged

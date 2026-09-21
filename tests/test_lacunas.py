@@ -108,9 +108,11 @@ class TestCorrecaoImportada(CasoComLedger):
 class TestSoResolvidos(CasoComLedger):
     def setUp(self):
         super().setUp()
-        self.ledger.registrar_erro("disco cheio em dados 1", "acme")
+        self.ledger.registrar_erro("disco cheio em backup dados quando roda 1", "acme")
         self.ledger.registrar_erro("disco cheio em backup quando roda 2", "acme")
-        self.ledger.registrar_correcao("disco cheio em dados 9", "rotacionar log", "acme")
+        self.ledger.registrar_correcao(
+            "disco cheio em backup dados quando roda 9", "rotacionar log", "acme"
+        )
 
     def test_buscar_so_resolvidos(self):
         todos = self.ledger.buscar("disco cheio em backup quando roda 7")

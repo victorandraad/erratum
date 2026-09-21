@@ -79,10 +79,11 @@ class DiffDoDev:
     """O preâmbulo comum aos portões: o que a branch mudou sobre a base, separado em teste e
     produção, mais a rodada do comando de teste. Uma pergunta ao git por variante, memoizada."""
 
-    def __init__(self, worktree, diff_ref, sh=None):
+    def __init__(self, worktree, diff_ref, sh=None, staged=False):
         self.worktree = Path(worktree)
         self.diff_ref = diff_ref
         self.sh = sh or executar
+        self.staged = bool(staged)
         self._cache = {}
 
     def arquivos(self, novos_ou_modificados=False):
@@ -91,7 +92,10 @@ class DiffDoDev:
         `novos_ou_modificados` acrescenta `--diff-filter=AM -M`: serve ao portão anti-stub (rename
         sem `-M` faria um stub ANTIGO parecer arquivo novo)."""
         if novos_ou_modificados not in self._cache:
-            cmd = ["git", "diff", f"{self.diff_ref}...HEAD", "--name-only"]
+            if self.staged:
+                cmd = ["git", "diff", "--cached", "--name-only"]
+            else:
+                cmd = ["git", "diff", f"{self.diff_ref}...HEAD", "--name-only"]
             if novos_ou_modificados:
                 cmd += ["--diff-filter=AM", "-M"]
             out = self.sh(cmd, cwd=str(self.worktree)).stdout or ""
@@ -114,10 +118,16 @@ class DiffDoDev:
         return [linha for linha in out.splitlines() if linha.strip()]
 
     def existe_na_base(self, rel):
-        return self.sh(["git", "cat-file", "-e", f"{self.diff_ref}:{rel}"],
+        ref = "HEAD" if self.staged else self.diff_ref
+        return self.sh(["git", "cat-file", "-e", f"{ref}:{rel}"],
                        cwd=str(self.worktree)).returncode == 0
 
     def ler(self, rel):
+        if self.staged:
+            r = self.sh(["git", "show", ":%s" % rel], cwd=str(self.worktree))
+            if getattr(r, "returncode", 0) != 0:
+                return None
+            return r.stdout
         try:
             return (self.worktree / rel).read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
@@ -612,8 +622,7 @@ class PortaoEmDash(Portao):
 
     nome = "em-dash"
 
-    def _julgar(self):
-        sh, wt = self.diff.sh, str(self.diff.worktree)
+    def _ofensores(self):
         correcoes = {}
         for rel in self.diff.arquivos():
             if not rel.endswith(_EM_DASH_EXTS):
@@ -624,6 +633,23 @@ class PortaoEmDash(Portao):
             corrigido = corrigir_travessao(src)
             if corrigido != src:
                 correcoes[rel] = corrigido
+        return correcoes
+
+    def _so_detectar(self):
+        correcoes = self._ofensores()
+        if not correcoes:
+            return Resultado(APROVOU, detalhe="nenhum travessão de prosa", corrigiu=False)
+        return Resultado(
+            REPROVOU,
+            motivo=", ".join(correcoes),
+            corrigiu=False,
+        )
+
+    def _julgar(self):
+        if self.diff.staged:
+            return self._so_detectar()
+        sh, wt = self.diff.sh, str(self.diff.worktree)
+        correcoes = self._ofensores()
         if not correcoes:
             return Resultado(APROVOU, detalhe="nenhum travessão de prosa", corrigiu=False)
         pendentes = self.diff.pendentes()

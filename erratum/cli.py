@@ -11,10 +11,13 @@ from dataclasses import asdict
 from pathlib import Path
 
 from erratum.banco import Banco
+from erratum.decisao import Decisao
 from erratum.ledger import ErroNaoEncontrado, Ledger
 from erratum.mineracao import ImportadorJsonl, MineradorDeStream
 from erratum.portoes import PORTOES, DiffDoDev
 from erratum.sementes import Semeador
+
+_MSG_ABSTAIN = "nada parecido com confiança no ledger"
 
 
 class _UsoErrado(Exception):
@@ -48,11 +51,13 @@ class ProjetoAtual:
 
 
 class WorktreeDoGate:
-    def __call__(self, worktree, base):
+    def __call__(self, worktree, base, staged=False):
         try:
             topo = self._git(worktree, "rev-parse", "--show-toplevel")
             if topo.returncode != 0:
                 return "worktree não é um repositório git"
+            if staged:
+                return None
             commit = self._git(
                 worktree,
                 "rev-parse",
@@ -136,16 +141,26 @@ class ComandoErr(Comando):
             etapa=args.stage,
             ferramenta=args.tool,
             contexto=contexto,
+            task=args.task,
         )
+        decisao = Decisao.de(pistas)
         if args.json:
             self._escrever_json(
-                {"erro": asdict(erro), "pistas": [asdict(p) for p in pistas]}
+                {
+                    "erro": asdict(erro),
+                    "pistas": [asdict(p) for p in pistas],
+                    "veredito": decisao.veredito,
+                    "confianca": decisao.confianca,
+                }
             )
             return 0
         self._saida.write(
             "erro #%d registrado [%s] assinatura: %s\n"
             % (erro.id, erro.projeto, erro.assinatura)
         )
+        if decisao.veredito == "abstain":
+            self._saida.write("%s\n" % _MSG_ABSTAIN)
+            return 0
         for i, pista in enumerate(pistas):
             for correcao in pista.correcoes:
                 self._saida.write(
@@ -162,6 +177,7 @@ class ComandoFix(Comando):
         parser.add_argument("nota")
         parser.add_argument("--ref", default="")
         parser.add_argument("--test", default="")
+        parser.add_argument("--task", default="")
 
     def executar(self, args, ledger):
         alvo = args.alvo
@@ -176,6 +192,7 @@ class ComandoFix(Comando):
                 args.project,
                 ref=args.ref,
                 teste=args.test,
+                task=args.task,
             )
         except ErroNaoEncontrado:
             return 2
@@ -294,15 +311,22 @@ class ComandoGate(Comando):
 
     def configurar(self, parser):
         parser.add_argument("lista")
-        parser.add_argument("--base", required=True)
+        parser.add_argument("--base", default=None)
         parser.add_argument("--worktree", default=".")
         parser.add_argument("--test-cmd", action="append", default=None)
+        parser.add_argument("--staged", action="store_true")
 
     def executar(self, args, ledger):
         nomes = [n.strip() for n in args.lista.split(",") if n.strip()]
         if not nomes or any(n not in PORTOES for n in nomes):
             return 2
-        recusa = self._worktree_do_gate(args.worktree, args.base)
+        staged = bool(args.staged)
+        if staged and "fix-noop" in nomes:
+            return 2
+        if not staged and not args.base:
+            return 2
+        base = args.base or "HEAD"
+        recusa = self._worktree_do_gate(args.worktree, base, staged=staged)
         if recusa:
             if args.json:
                 self._escrever_json({"erro": recusa})
@@ -316,7 +340,7 @@ class ComandoGate(Comando):
         resultados = []
         for nome in nomes:
             resultado = PORTOES[nome](
-                DiffDoDev(Path(args.worktree), args.base),
+                DiffDoDev(Path(args.worktree), base, staged=staged),
                 comandos_de_teste=args.test_cmd,
                 ao_decidir=ao_decidir,
             ).rodar()
@@ -351,22 +375,47 @@ class ComandoFind(Comando):
         parser.add_argument("texto")
         parser.add_argument("-n", type=int, default=5)
         parser.add_argument("--resolved", action="store_true")
+        parser.add_argument("--registrar", action="store_true")
+        parser.add_argument("--task", default="")
 
     def executar(self, args, ledger):
         self._avisar_regra_antiga(ledger)
         texto = self._ler_texto(args.texto)
-        achados = ledger.buscar(
-            texto, n=args.n, so_resolvidos=args.resolved
-        )
+        if args.registrar:
+            decisao = ledger.registrar_pistas_de_consulta(
+                texto,
+                args.project,
+                task=args.task,
+                n=args.n,
+                so_resolvidos=args.resolved,
+            )
+        else:
+            decisao = ledger.decidir(
+                texto, n=args.n, so_resolvidos=args.resolved
+            )
+        achados = list(decisao.achados)
         if args.json:
-            self._escrever_json({"achados": [asdict(a) for a in achados]})
+            self._escrever_json(
+                {
+                    "veredito": decisao.veredito,
+                    "confianca": decisao.confianca,
+                    "achados": [asdict(a) for a in achados],
+                }
+            )
             return 0
-        if not achados:
-            self._saida.write("nada parecido no ledger\n")
+        if decisao.veredito == "abstain":
+            self._saida.write("%s\n" % _MSG_ABSTAIN)
             return 0
         for i, achado in enumerate(achados, 1):
             self._saida.write(
-                "%d. [%s] %s\n" % (i, achado.origem, achado.assinatura)
+                "%d. [%s] %s (%.2f) %s\n"
+                % (
+                    i,
+                    achado.origem,
+                    achado.veredito,
+                    achado.confianca,
+                    achado.assinatura,
+                )
             )
             for correcao in achado.correcoes:
                 self._saida.write(
@@ -481,6 +530,48 @@ class ComandoSeed(Comando):
         return 0
 
 
+class ComandoDesfecho(Comando):
+    nome = "desfecho"
+
+    def configurar(self, parser):
+        parser.add_argument("task")
+        parser.add_argument("desfecho")
+
+    def executar(self, args, ledger):
+        try:
+            n = ledger.registrar_desfecho(
+                args.task, args.desfecho, projeto=args.project
+            )
+        except ValueError:
+            return 2
+        if args.json:
+            self._escrever_json({"fechou": n})
+            return 0
+        self._saida.write("%d\n" % n)
+        return 0
+
+
+class ComandoEfeito(Comando):
+    nome = "efeito"
+
+    def configurar(self, parser):
+        parser.add_argument("--days", type=int, default=None)
+        parser.add_argument("--all-projects", action="store_true")
+
+    def executar(self, args, ledger):
+        projeto = None if args.all_projects else args.project
+        dado = ledger.efeito(projeto, dias=args.days)
+        if args.json:
+            self._escrever_json(dado)
+            return 0
+        for g in dado["tasks"]:
+            linha = "%s N=%d" % (g["grupo"], g["n"])
+            if g["amostra_pequena"]:
+                linha += " amostra pequena, não conclua"
+            self._saida.write(linha + "\n")
+        return 0
+
+
 class ComandoReindex(Comando):
     nome = "reindex"
 
@@ -559,6 +650,8 @@ class Cli:
                 ComandoImport(self._entrada, self._saida, aviso=self._aviso),
                 ComandoSeed(self._entrada, self._saida, aviso=self._aviso),
                 ComandoReindex(self._entrada, self._saida, aviso=self._aviso),
+                ComandoDesfecho(self._entrada, self._saida, aviso=self._aviso),
+                ComandoEfeito(self._entrada, self._saida, aviso=self._aviso),
             ]
         self._comandos = list(comandos)
 
@@ -593,7 +686,7 @@ def main(argv=None):
         argv = sys.argv[1:]
     try:
         with Banco() as banco:
-            cli = Cli(lambda: Ledger.sobre(banco))
+            cli = Cli(lambda: Ledger.sobre(banco, aviso=sys.stderr))
             codigo = cli.executar(argv)
     except BrokenPipeError:
         # flush do interpretador na saida; o resto vai pra /dev/null
