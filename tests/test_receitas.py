@@ -218,6 +218,16 @@ class TesteCheckCmd(CasoComLedger):
         linha = self.banco.consultar("SELECT * FROM receitas_fts")[0]
         self.assertNotIn("ci-espera", linha["note"] or "")
 
+    def test_canonico_de_uma_receita_nao_esconde_o_desvio_de_outra(self):
+        # a receita do projeto manda usar o script; o comando cru é canônico só da geral
+        self.cli(
+            "recipe", "add", "espera-crua", "--project", "geral",
+            "--quando", "esperar o CI", "--cmd", "gh run watch <run>",
+        )
+        codigo, saida = self.cli("check-cmd", "gh run watch 99", "--json")
+        self.assertEqual(codigo, 1)
+        self.assertEqual(json.loads(saida)["receita"], "esperar-ci")
+
     def test_json(self):
         codigo, saida = self.cli("check-cmd", "gh run watch 99", "--json")
         self.assertEqual(codigo, 1)

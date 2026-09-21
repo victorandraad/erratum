@@ -205,7 +205,8 @@ class RepositorioDeReceitas:
                 por_nome.setdefault(receita.nome, receita)
             else:
                 por_nome[receita.nome] = receita
-        return list(por_nome.values())
+        # as do projeto na frente: quando duas receitas falam do comando, vale a local
+        return sorted(por_nome.values(), key=lambda r: r.projeto == "geral")
 
     def _de_linha(self, linha):
         return Receita(
@@ -291,18 +292,20 @@ class VerificadorDeComando:
         """
         trecho = (comando or "")[: self.LIMITE_DO_COMANDO]
         visiveis = self._receitas.visiveis(projeto)
+        # o canonico so protege a PROPRIA receita do seu em_vez_de: o comando cru que e
+        # canonico de uma receita ainda pode ser o improviso que outra manda trocar
+        for receita in visiveis:
+            if _casa_desvio(trecho, receita) and not _casa_canonico(trecho, receita):
+                self._gravar(
+                    "desvio", projeto, task, receita, comando, chave_importacao
+                )
+                return ResultadoDeVerificacao("desvio", receita)
         for receita in visiveis:
             if _casa_canonico(trecho, receita):
                 self._gravar(
                     "uso", projeto, task, receita, comando, chave_importacao
                 )
                 return ResultadoDeVerificacao("uso", receita)
-        for receita in visiveis:
-            if _casa_desvio(trecho, receita):
-                self._gravar(
-                    "desvio", projeto, task, receita, comando, chave_importacao
-                )
-                return ResultadoDeVerificacao("desvio", receita)
         return ResultadoDeVerificacao(None, None)
 
     def _gravar(self, tipo, projeto, task, receita, comando, chave_importacao):
