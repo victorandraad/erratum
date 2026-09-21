@@ -87,6 +87,7 @@ class WorktreeDoGate:
 
 class Comando(ABC):
     nome = ""
+    aliases = ()
 
     def __init__(self, entrada, saida, aviso=None):
         self._entrada = entrada
@@ -657,6 +658,7 @@ class ComandoSeed(Comando):
 
 class ComandoDesfecho(Comando):
     nome = "desfecho"
+    aliases = ("outcome",)
 
     def configurar(self, parser):
         parser.add_argument("task")
@@ -678,6 +680,7 @@ class ComandoDesfecho(Comando):
 
 class ComandoEfeito(Comando):
     nome = "efeito"
+    aliases = ("effect",)
 
     def configurar(self, parser):
         parser.add_argument("--days", type=int, default=None)
@@ -821,6 +824,7 @@ class ComandoCheckCmd(Comando):
 
 class ComandoCompactar(Comando):
     nome = "compactar"
+    aliases = ("compact",)
 
     def configurar(self, parser):
         parser.add_argument("--dry-run", action="store_true")
@@ -945,7 +949,10 @@ class Cli:
         parser = _Parser(prog="erratum")
         sub = parser.add_subparsers(dest="comando")
         for cmd in self._comandos:
-            p = sub.add_parser(cmd.nome)
+            extras = {}
+            if getattr(cmd, "aliases", ()):
+                extras["aliases"] = list(cmd.aliases)
+            p = sub.add_parser(cmd.nome, **extras)
             p.add_argument("--json", action="store_true")
             p.add_argument("--project", default=None)
             cmd.configurar(p)

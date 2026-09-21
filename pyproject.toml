@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "erratum-cli"
 version = "0.1.0"
-description = "Portões que provam que a correção conserta, e um ledger local para não resolver o mesmo erro duas vezes."
+description = "Gates that prove the fix actually fixes, and a local ledger so the same error is not solved twice."
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.9"

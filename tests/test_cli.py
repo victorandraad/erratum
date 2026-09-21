@@ -45,3 +45,11 @@ class TestCliFix(CasoComLedger):
 
     def test_fix_de_id_inexistente_e_uso_errado(self):
         self.assertEqual(self.cli("fix", "42", "nota")[0], 2)
+
+
+class TestAliasesEmIngles(CasoComLedger):
+    def test_compact_e_alias_de_compactar(self):
+        codigo, saida = self.cli("compact", "--dry-run", "--json")
+        self.assertEqual(codigo, 0)
+        dado = json.loads(saida)
+        self.assertEqual((dado["linhas_antes"], dado["linhas_depois"]), (0, 0))
