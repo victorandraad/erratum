@@ -8,8 +8,11 @@ from dataclasses import dataclass, replace
 
 # grupo que contem + * ou { e o proprio grupo e seguido de + * ou {
 _QUANTIFICADOR_ANINHADO = re.compile(r"\([^()]*[+*{][^()]*\)[+*{]")
+# grupo com | seguido de + * ou {n,} sem teto; ? e sem quantificador seguem validos
+_ALTERNATIVA_ABERTA = re.compile(r"\([^()]*\|[^()]*\)(?:\+|\*|\{\d+,})")
 _PLACEHOLDER = re.compile(r"<[^<>\s]+>")
 _OPCIONAL = re.compile(r" \[(?=-|<)")
+_EXCECAO_DE_REGEX = (re.error, OverflowError, RecursionError)
 
 
 @dataclass(frozen=True)
@@ -45,10 +48,12 @@ class GuardaDeRegex:
             raise ValueError("regex longa demais")
         try:
             re.compile(padrao)
-        except re.error as e:
+        except (re.error, OverflowError) as e:
             raise ValueError("regex invalida") from e
         if _QUANTIFICADOR_ANINHADO.search(padrao):
             raise ValueError("quantificador aninhado")
+        if _ALTERNATIVA_ABERTA.search(padrao):
+            raise ValueError("alternativa sob quantificador aberto")
 
 
 class RepositorioDeReceitas:
@@ -364,7 +369,7 @@ def _casa_canonico(trecho, receita):
         return False
     try:
         return re.search(padrao, trecho) is not None
-    except re.error:
+    except _EXCECAO_DE_REGEX:
         return False
 
 
@@ -375,6 +380,6 @@ def _casa_desvio(trecho, receita):
         try:
             if re.search(padrao, trecho):
                 return True
-        except re.error:
+        except _EXCECAO_DE_REGEX:
             continue
     return False

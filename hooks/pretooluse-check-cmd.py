@@ -8,6 +8,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+LIMITE_DO_STDIN = 1048576
+
 
 def _sair(codigo=0):
     sys.exit(codigo)
@@ -15,8 +17,10 @@ def _sair(codigo=0):
 
 def _payload():
     try:
-        bruto = sys.stdin.read()
+        bruto = sys.stdin.read(LIMITE_DO_STDIN + 1)
     except OSError:
+        return None
+    if len(bruto) > LIMITE_DO_STDIN:
         return None
     if not (bruto or "").strip():
         return None
