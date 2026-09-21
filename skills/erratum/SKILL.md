@@ -44,6 +44,27 @@ teste verde de primeira). Diga o que fez dar certo, não só o que foi feito.
 erratum win "<o que funcionou e por quê>" --task <id> --cost <usd>
 ```
 
+## Antes de improvisar um procedimento: `erratum how`
+
+Esperar CI, reiniciar serviço, rodar a suíte, consultar o banco, criar worktree: antes de montar o
+comando na mão, pergunte se já existe o comando certo.
+
+```sh
+erratum how "<o que quero fazer>" -n 3
+```
+
+Veio receita: rode o comando da linha `rode:` (troque os `<marcadores>`) e leia a linha `perigo:`
+se houver. Veio `sem receita pra isso`: siga por conta própria. Se um comando seu for respondido com
+`use a receita <nome>: <comando>` (é o hook do `check-cmd`), troque pelo comando da receita em vez de
+insistir. Procedimento novo que deu certo e vai se repetir vira receita:
+
+```sh
+erratum recipe add <nome> --quando "<quando usar>" --cmd "<comando com <marcadores>>" \
+  --em-vez-de '<regex do improviso que ela substitui>' [--perigo "<aviso>"] [--project geral]
+```
+
+Receita é comando executável. Conhecimento sem comando não entra aqui.
+
 ## Antes de commitar: portões determinísticos (zero modelo)
 
 ```sh
@@ -71,6 +92,6 @@ consertar na raiz. `[!] nunca decidiu` num portão = portão quebrado, não port
 - Não registre erro de digitação que você corrigiu em cinco segundos; registre o que custou tempo
   ou o que pode voltar.
 - Escrita concorrente é segura (SQLite em WAL): vários agentes e CLIs podem usar o mesmo ledger.
-- O ledger é só erro, correção, acerto e veredito de portão. Fato durável sobre o projeto ou sobre
+- O ledger é só erro, correção, acerto, veredito de portão e receita (comando executável). Fato durável sobre o projeto ou sobre
   a pessoa vai para a memória do seu agente, não para cá.
 - O ledger fora do ar nunca bloqueia o trabalho: se o comando falhar, siga e avise no retorno.

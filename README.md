@@ -32,6 +32,26 @@ O ledger registra o erro, guarda a correção pela **assinatura** do erro e a de
 reaparece. `err` ao falhar, `fix` ao resolver, `find` para consultar. Quando não há nada parecido
 com confiança, ele diz isso em vez de chutar. Python puro (stdlib), um SQLite.
 
+## E não improvise o que já tem comando
+
+O agente refaz na mão o que um script já faz: cada vez de um jeito, cada jeito com a sua taxa de
+erro. Uma **receita** guarda o comando do seu negócio, quando usar e o improviso que ela substitui,
+e o `check-cmd` barra o improviso antes de rodar:
+
+```sh
+$ erratum check-cmd "while true; do gh pr checks 12; sleep 30; done"
+use a receita esperar-ci-do-pr: gh pr checks <pr> --watch --fail-fast
+$ echo $?
+1
+```
+
+Só regex contra o comando, sem modelo e sem busca: roda a cada comando do agente, pelo hook
+`PreToolUse`, que por padrão avisa e deixa passar. `erratum how "<intenção>"` acha a receita antes de
+improvisar, no mesmo contrato `match | talvez | abstain` da busca de erros, e o `top` lista os
+improvisos que ainda acontecem. O escopo é estreito de propósito: receita é comando executável,
+quando usar e o que ela substitui; conhecimento solto não entra.
+[docs/receitas.md](docs/receitas.md).
+
 ## Por que não é mais uma memória para agente
 
 - **Determinístico**: assinatura normalizada, FTS5 e regex. A mesma entrada dá a mesma saída.
@@ -71,6 +91,10 @@ teste que passa sem a correção. Depois do `seed`, colar um desses erros em `er
 qualquer projeto, já devolve a correção. Semente não é ocorrência: não entra no `top` nem zera
 streak.
 
+O `seed` traz também 5 **receitas** genéricas no projeto `geral` (esperar o CI de um PR, consultar
+SQLite sem o binário, rodar a suíte com estado isolado, worktree para trabalho isolado, reiniciar
+serviço com confirmação de saúde), cada uma com o improviso que ela substitui.
+
 ## Em 30 segundos
 
 ```sh
@@ -102,23 +126,26 @@ banco foi gravado com a regra antiga, e `erratum reindex [--dry-run]` recalcula 
 
 | Comando | Faz |
 |---|---|
-| `seed [--list]` | carrega as correções genéricas embarcadas (idempotente); `--list` só mostra |
+| `seed [--list]` | carrega as correções e as receitas genéricas embarcadas (idempotente); `--list` só mostra |
 | `err "<texto>" [--stage --tool --kind --task]` | registra o erro e já devolve a correção conhecida: a melhor pista vem inteira, as demais em uma linha (`talvez:`) |
-| `fix <id\|texto> "<nota>" [--ref --test --task]` | registra a correção pela assinatura do erro; com `--task`, fecha as pistas da task como `resolveu` |
+| `fix <id\|texto> "<nota>" [--ref --test --task --recipe]` | registra a correção pela assinatura do erro; com `--recipe <nome>`, a pista do `err` passa a mostrar o comando da receita; com `--task`, fecha as pistas da task como `resolveu` |
 | `find "<texto>" [-n N] [--resolved]` | busca no ledger (assinatura, depois FTS); `--resolved` fica só com achados que já têm correção (o `-n` vale depois desse filtro); cada achado traz veredito e confiança; não registra, salvo `--registrar [--task]` |
-| `top [--days N] [--all-projects] [--resolved]` | lista o que se repete, agrupado por assinatura (não resolvido primeiro, peso `max(tasks, 1)`, depois ocorrências), e a taxa de reprovação de cada portão |
+| `top [--days N] [--all-projects] [--resolved]` | lista o que se repete, agrupado por assinatura (não resolvido primeiro, peso `max(tasks, 1)`, depois ocorrências), a taxa de reprovação de cada portão e os improvisos por receita |
 | `win "<o que>" [--task --cost]` | registra um acerto |
 | `gate <portões> --base <ref> [--worktree DIR] [--test-cmd "..."]` | roda portões determinísticos no diff e grava o veredito; `--staged` julga o índice (pre-commit) |
 | `desfecho <task> <resolveu\|nao_resolveu\|descartado>` | fecha as pistas abertas da task |
-| `efeito [--days N]` | por origem e por veredito: pistas, % com desfecho, % `resolveu`; e tasks com `match` contra tasks sem pista, com o N ao lado |
+| `efeito [--days N]` | por origem e por veredito: pistas, % com desfecho, % `resolveu`; tasks com `match` contra tasks sem pista, com o N ao lado; e uso contra desvio por receita |
 | `reindex [--dry-run]` | recalcula as assinaturas gravadas com a regra atual e reconstrói o FTS |
-| `scan <stream.jsonl>` | minera os `tool_result` com `is_error` de um stream-json de agente |
+| `scan <stream.jsonl>` | minera os `tool_result` com `is_error` de um stream-json de agente, e conta os comandos Bash que são improviso (desvio) ou receita (uso) |
+| `recipe add <nome> --quando "..." --cmd "..." [--em-vez-de "<regex>" ...] [--notas --perigo]` | cadastra ou atualiza uma receita; `recipe ls`, `recipe show <nome>`, `recipe rm <nome>` |
+| `how "<intenção>" [-n 3] [--task]` | acha a receita pela intenção (FTS sobre nome, quando e notas), com veredito e confiança; sem achado confiante: `sem receita pra isso` |
+| `check-cmd "<comando bash>" [--task]` | casa o comando com os `em_vez_de` das receitas do projeto e de `geral`: improviso imprime `use a receita ...` e sai 1; silêncio e 0 no resto |
 | `import <arquivo.jsonl>` | carrega erros de um JSONL genérico |
 
 O streak de `win` conta os acertos do projeto com timestamp depois do último erro do mesmo projeto; um erro zera a sequência.
 
 Todos aceitam `--json` e `--project` (padrão: nome da raiz do git). Texto `-` lê do stdin.
-Saída 0 sempre, com duas exceções: `gate` com algum portão reprovado sai com 1, e uso errado sai com 2.
+Saída 0 sempre, com três exceções: `gate` com algum portão reprovado sai com 1, `check-cmd` que achou improviso sai com 1, e uso errado sai com 2.
 Pipe fechado (`erratum top | head`) sai 0, sem traceback e sem nada no stderr: vale para qualquer comando.
 
 ## Portões (`gate`)
@@ -204,6 +231,10 @@ com correção; o `n` corta depois do filtro.
 `Ledger.efeito(projeto=None, dias=None)` e `Ledger.reindexar(simular=False)` espelham os comandos.
 `Semeador(ledger, caminho=None).semear()` carrega um JSON de sementes (o embarcado, ou o do seu
 time) e devolve quantas entraram; `Ledger.registrar_semente(dict)` grava uma.
+Receitas: `Ledger.verificar_comando(comando, projeto, task="")` devolve o resultado do `check-cmd`
+(`tipo` em `uso`, `desvio` ou `None`, e a `receita`), `Ledger.consultar_receita(texto, projeto)` é o
+`how`, e `salvar_receita`, `receita_por_nome`, `receitas_visiveis` e `remover_receita` espelham o
+`recipe`. A coluna `receita` da `Correcao` e o campo `receita` do `Achado` vieram por acréscimo.
 
 ## Onde ficam os dados
 
@@ -216,7 +247,7 @@ para vários usuários, o que não fazer (volume de rede) e backup:
 
 - **Não é daemon nem orquestrador**: nada roda em segundo plano, nada dispara agente. É uma lib e
   uma CLI que o seu fluxo chama.
-- **Não é memória geral**: guarda erro, correção, acerto e veredito de portão. Preferência, decisão
+- **Não é memória geral**: guarda erro, correção, acerto, veredito de portão e receita (comando executável, não conhecimento solto). Preferência, decisão
   de produto e contexto de projeto vão para a memória do seu agente.
 - **Não usa embeddings nem modelo**: assinatura normalizada e FTS5. Se quiser busca semântica,
   plugue a sua por `ERRATUM_SEARCH_CMD`; se quiser um juiz para os casos em dúvida, `ERRATUM_JUDGE_CMD`.
@@ -225,7 +256,7 @@ para vários usuários, o que não fazer (volume de rede) e backup:
 ## Privacidade
 
 Tudo que você registra fica no seu banco local: o `erratum` não faz rede. O repositório não
-embarca dado de ninguém além das sementes genéricas, e um teste (`tests/test_privacidade.py`)
+embarca dado de ninguém além das sementes genéricas (correções e receitas de ferramentas públicas), e um teste (`tests/test_privacidade.py`)
 reprova qualquer arquivo versionado que carregue termo privado de quem mantém. Do seu lado: nunca
 cole segredo, token ou dado de cliente no texto de um erro, porque ele vai para o banco em claro.
 
