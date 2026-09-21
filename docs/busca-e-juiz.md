@@ -52,7 +52,8 @@ léxica chega a 85% de precisão com recall útil**. A folga chega lá, mas só 
 tudo que o FTS acha sai como `talvez`. No ledger só de sementes (textos curtos e focados) o quadro é
 outro: as 10 variações testadas têm folga de 1.9 a 9.8 e saem `match`, e erro de assunto alheio cai
 no piso de cobertura. É por isso que existe o juiz opcional abaixo: o limiar decide o que é seguro
-afirmar; o resto ele entrega como dúvida.
+afirmar; o resto ele entrega como dúvida. Dito sem rodeio: precisão alta em match **aproximado** pede
+o `ERRATUM_JUDGE_CMD`; só com o léxico, `match` fica para a assinatura exata e para o FTS com folga alta.
 
 ## Juiz externo (`ERRATUM_JUDGE_CMD`)
 
