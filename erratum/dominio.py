@@ -114,6 +114,7 @@ class TaxaDePortao:
     reprovou: int
     pulou: int
     taxa: float
+    nunca_decidiu: bool = False
 
 
 @dataclass(frozen=True)

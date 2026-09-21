@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import subprocess
 import sys
 from abc import ABC, abstractmethod
@@ -226,16 +227,16 @@ class ComandoTop(Comando):
                 )
         for t in taxas:
             julgados = t.rodadas - t.pulou
-            self._saida.write(
-                "portão %s: %d/%d reprovou (%d%%), %d pulou\n"
-                % (
-                    t.portao,
-                    t.reprovou,
-                    julgados,
-                    int(round(t.taxa * 100)),
-                    t.pulou,
-                )
+            linha = "portão %s: %d/%d reprovou (%d%%), %d pulou" % (
+                t.portao,
+                t.reprovou,
+                julgados,
+                int(round(t.taxa * 100)),
+                t.pulou,
             )
+            if t.nunca_decidiu:
+                linha += "  [!] nunca decidiu: portão quebrado?"
+            self._saida.write(linha + "\n")
         return 0
 
 
@@ -330,10 +331,13 @@ class ComandoFind(Comando):
     def configurar(self, parser):
         parser.add_argument("texto")
         parser.add_argument("-n", type=int, default=5)
+        parser.add_argument("--resolved", action="store_true")
 
     def executar(self, args, ledger):
         texto = self._ler_texto(args.texto)
-        achados = ledger.buscar(texto, n=args.n)
+        achados = ledger.buscar(
+            texto, n=args.n, so_resolvidos=args.resolved
+        )
         if args.json:
             self._escrever_json({"achados": [asdict(a) for a in achados]})
             return 0
@@ -519,7 +523,14 @@ class Cli:
 def main(argv=None):
     if argv is None:
         argv = sys.argv[1:]
-    with Banco() as banco:
-        cli = Cli(lambda: Ledger.sobre(banco))
-        codigo = cli.executar(argv)
+    try:
+        with Banco() as banco:
+            cli = Cli(lambda: Ledger.sobre(banco))
+            codigo = cli.executar(argv)
+    except BrokenPipeError:
+        # flush do interpretador na saida; o resto vai pra /dev/null
+        # pra nao estourar de novo no shutdown
+        devnull = os.open(os.devnull, os.O_WRONLY)
+        os.dup2(devnull, sys.stdout.fileno())
+        sys.exit(0)
     sys.exit(codigo)

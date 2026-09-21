@@ -167,44 +167,57 @@ class RepositorioDeCorrecoes:
         self._banco = banco
 
     def inserir(self, correcao, chave_importacao=None):
+        gravado, _inserido = self.inserir_se_novo(correcao, chave_importacao)
+        return gravado
+
+    def inserir_se_novo(self, correcao, chave_importacao=None):
         if chave_importacao:
             existente = self._por_chave(chave_importacao)
             if existente is not None:
-                return existente
-        with self._banco.transacao() as con:
-            if chave_importacao:
-                linha = con.execute(
-                    "SELECT * FROM fixes WHERE import_key = ?",
-                    (chave_importacao,),
-                ).fetchone()
-                if linha is not None:
-                    return self._de_linha(linha)
-            cur = con.execute(
-                """
-                INSERT INTO fixes(
-                    ts, project, signature, note, ref, test, source, import_key
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    correcao.ts,
-                    correcao.projeto,
-                    correcao.assinatura,
-                    correcao.nota,
-                    correcao.ref,
-                    correcao.teste,
-                    correcao.fonte,
-                    chave_importacao,
-                ),
-            )
-            novo_id = cur.lastrowid
-            con.execute(
-                """
-                INSERT INTO ledger_fts(signature, text, note, src)
-                VALUES (?, ?, ?, ?)
-                """,
-                (correcao.assinatura, "", correcao.nota, "fix:%d" % novo_id),
-            )
-        return replace(correcao, id=novo_id)
+                return existente, False
+        try:
+            with self._banco.transacao() as con:
+                if chave_importacao:
+                    linha = con.execute(
+                        "SELECT * FROM fixes WHERE import_key = ?",
+                        (chave_importacao,),
+                    ).fetchone()
+                    if linha is not None:
+                        return self._de_linha(linha), False
+                cur = con.execute(
+                    """
+                    INSERT INTO fixes(
+                        ts, project, signature, note, ref, test, source,
+                        import_key
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        correcao.ts,
+                        correcao.projeto,
+                        correcao.assinatura,
+                        correcao.nota,
+                        correcao.ref,
+                        correcao.teste,
+                        correcao.fonte,
+                        chave_importacao,
+                    ),
+                )
+                novo_id = cur.lastrowid
+                con.execute(
+                    """
+                    INSERT INTO ledger_fts(signature, text, note, src)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    (correcao.assinatura, "", correcao.nota, "fix:%d" % novo_id),
+                )
+            return replace(correcao, id=novo_id), True
+        except sqlite3.IntegrityError:
+            if not chave_importacao:
+                raise
+            existente = self._por_chave(chave_importacao)
+            if existente is None:
+                raise
+            return existente, False
 
     def por_assinatura(self, assinatura):
         linhas = self._banco.consultar(
@@ -312,7 +325,8 @@ class RepositorioDePortoes:
                 COUNT(*) AS rodadas,
                 SUM(CASE WHEN verdict = 'reprovou' THEN 1 ELSE 0 END)
                     AS reprovou,
-                SUM(CASE WHEN verdict = 'pulou' THEN 1 ELSE 0 END) AS pulou
+                SUM(CASE WHEN verdict IN ('pulou', 'skipped') THEN 1 ELSE 0 END)
+                    AS pulou
             FROM gate_runs
             """
             + where
@@ -334,4 +348,5 @@ class RepositorioDePortoes:
             reprovou=reprovou,
             pulou=pulou,
             taxa=taxa,
+            nunca_decidiu=rodadas > 0 and pulou == rodadas,
         )

@@ -106,13 +106,41 @@ class Ledger:
     def erro(self, id_erro):
         return self._erros.por_id(id_erro)
 
-    def buscar(self, texto, n=5):
-        return self._buscador.buscar(texto, n)
+    def buscar(self, texto, n=5, so_resolvidos=False):
+        if not so_resolvidos:
+            return self._buscador.buscar(texto, n)
+        pedido = n
+        while True:
+            candidatos = self._buscador.buscar(texto, pedido)
+            filtrados = [a for a in candidatos if a.correcoes]
+            if len(filtrados) >= n or len(candidatos) < pedido:
+                return filtrados[:n]
+            pedido *= 2
 
     def correcoes_de(self, assinatura):
         if isinstance(assinatura, Assinatura):
             assinatura = assinatura.valor
         return self._correcoes.por_assinatura(assinatura)
+
+    def _assinatura_do_alvo(self, alvo):
+        if isinstance(alvo, int):
+            erro = self._erros.por_id(alvo)
+            if erro is None:
+                raise ErroNaoEncontrado(alvo)
+            return erro.assinatura
+        return Assinatura(alvo).valor
+
+    def _montar_correcao(self, alvo, nota, projeto, ref, teste, fonte, ts):
+        return Correcao(
+            id=0,
+            ts=self._ts() if ts is None else ts,
+            projeto=projeto,
+            assinatura=self._assinatura_do_alvo(alvo),
+            nota=nota,
+            ref=ref,
+            teste=teste,
+            fonte=fonte,
+        )
 
     def registrar_correcao(
         self,
@@ -123,25 +151,30 @@ class Ledger:
         teste="",
         fonte="manual",
         chave_importacao=None,
+        ts=None,
     ):
-        if isinstance(alvo, int):
-            erro = self._erros.por_id(alvo)
-            if erro is None:
-                raise ErroNaoEncontrado(alvo)
-            valor = erro.assinatura
-        else:
-            valor = Assinatura(alvo).valor
-        correcao = Correcao(
-            id=0,
-            ts=self._ts(),
-            projeto=projeto,
-            assinatura=valor,
-            nota=nota,
-            ref=ref,
-            teste=teste,
-            fonte=fonte,
+        correcao = self._montar_correcao(
+            alvo, nota, projeto, ref, teste, fonte, ts
         )
         return self._correcoes.inserir(
+            correcao, chave_importacao=chave_importacao
+        )
+
+    def registrar_correcao_importada(
+        self,
+        alvo,
+        nota,
+        projeto,
+        ref="",
+        teste="",
+        fonte="manual",
+        chave_importacao=None,
+        ts=None,
+    ):
+        correcao = self._montar_correcao(
+            alvo, nota, projeto, ref, teste, fonte, ts
+        )
+        return self._correcoes.inserir_se_novo(
             correcao, chave_importacao=chave_importacao
         )
 
@@ -167,8 +200,7 @@ class Ledger:
             padroes = [p for p in padroes if not p.resolvido]
 
         def chave(p):
-            peso = p.tasks if p.tasks > 0 else p.ocorrencias
-            return (p.resolvido, -peso, -p.ocorrencias, p.assinatura)
+            return (p.resolvido, -max(p.tasks, 1), -p.ocorrencias, p.assinatura)
 
         return sorted(padroes, key=chave)
 

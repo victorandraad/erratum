@@ -31,8 +31,8 @@ rodada some), então uma correção cobre as ocorrências passadas e as futuras.
 |---|---|
 | `err "<texto>" [--stage --tool --kind --task]` | registra o erro e já devolve a correção conhecida |
 | `fix <id\|texto> "<nota>" [--ref --test]` | registra a correção pela assinatura do erro |
-| `find "<texto>" [-n N]` | busca no ledger (assinatura, depois FTS); não registra |
-| `top [--days N] [--all-projects] [--resolved]` | lista o que se repete, agrupado por assinatura, e a taxa de reprovação de cada portão |
+| `find "<texto>" [-n N] [--resolved]` | busca no ledger (assinatura, depois FTS); `--resolved` fica só com achados que já têm correção (o `-n` vale depois desse filtro); não registra |
+| `top [--days N] [--all-projects] [--resolved]` | lista o que se repete, agrupado por assinatura (não resolvido primeiro, peso `max(tasks, 1)`, depois ocorrências), e a taxa de reprovação de cada portão |
 | `win "<o que>" [--task --cost]` | registra um acerto |
 | `gate <portões> --base <ref> [--worktree DIR] [--test-cmd "..."]` | roda portões determinísticos no diff e grava o veredito |
 | `scan <stream.jsonl>` | minera os `tool_result` com `is_error` de um stream-json de agente |
@@ -42,12 +42,15 @@ O streak de `win` conta os acertos do projeto com timestamp depois do último er
 
 Todos aceitam `--json` e `--project` (padrão: nome da raiz do git). Texto `-` lê do stdin.
 Saída 0 sempre, com duas exceções: `gate` com algum portão reprovado sai com 1, e uso errado sai com 2.
+Pipe fechado (`erratum top | head`) sai 0, sem traceback e sem nada no stderr: vale para qualquer comando.
 
 ## Portões (`gate`)
 
 Checagens sem modelo sobre o diff entre `--base` e o `HEAD` do `--worktree` (padrão: diretório atual).
 Cada veredito (`aprovou`, `reprovou`, `pulou`) vai pra `gate_runs`, e o `top` mostra quanto cada
-portão reprova: portão que nunca dispara é portão que não está servindo.
+portão reprova: portão que nunca dispara é portão que não está servindo. Se todas as rodadas
+pularam, a linha humana termina com `[!] nunca decidiu: portão quebrado?` e o JSON traz
+`nunca_decidiu: true`.
 
 ```sh
 erratum gate em-dash,stub-neutro,fix-noop --base main --test-cmd "python -B -m unittest {testes}"
@@ -93,6 +96,14 @@ Ao errar, rode `erratum err "<texto do erro>"` antes de tentar de novo: se vier 
 conhecida", aplique. Ao corrigir algo novo, `erratum fix <id> "<o que resolveu>"`. Passe limpo
 (entregou sem erro no caminho), `erratum win "<o que entregou>"`.
 ```
+
+## API
+
+`Ledger.registrar_correcao` aceita `ts=None` (None usa o relógio) e continua devolvendo a
+`Correcao`. Importação idempotente: `registrar_correcao_importada(...)` devolve
+`(correcao, inseriu)`, no mesmo espírito de `registrar_erro_importado`.
+`Ledger.buscar(texto, n=5, so_resolvidos=False)` com `so_resolvidos=True` devolve só achados
+com correção; o `n` corta depois do filtro.
 
 ## Onde ficam os dados
 
