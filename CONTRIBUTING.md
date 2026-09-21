@@ -6,6 +6,13 @@ Python 3.9+, só biblioteca padrão. Teste que falha primeiro, depois a implemen
 python -m unittest
 ```
 
+Instale o hook antes do primeiro commit: ele roda os portões `em-dash` e `stub-neutro` no que está
+em stage (detalhes em [docs/portoes-no-commit.md](docs/portoes-no-commit.md)).
+
+```sh
+cp hooks/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
+```
+
 ## Privacidade do repo
 
 `tests/test_privacidade.py` varre todo arquivo versionado (menos `LICENSE`, que leva o nome do

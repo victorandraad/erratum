@@ -1,8 +1,44 @@
 # erratum
 
-Agente de código erra, alguém conserta, e na semana seguinte o mesmo erro volta porque a correção
-ficou num log que ninguém lê. `erratum` é um ledger local: registra o erro, guarda a correção pela
-**assinatura** do erro e a devolve na hora em que ele reaparece. Python puro (stdlib), um SQLite.
+Prova que a correção conserta, sem modelo no meio, e guarda a correção para o erro não ser resolvido duas vezes.
+
+## O problema
+
+O agente diz que consertou. O teste passa. E o teste passaria igual sem a correção: ele nunca
+exercitou o defeito. O diff entra, o erro volta na semana seguinte.
+
+## O portão
+
+`erratum gate` reverte só o código de produção do diff e roda de novo os testes que o próprio diff
+trouxe. Verde sem a correção é reprovação:
+
+```sh
+$ git log --oneline -1
+3f1c2aa corrige soma                      # troca a - b por a + b, e traz um teste novo
+$ erratum gate fix-noop --base main --test-cmd "python3 -B -m unittest {testes}"
+fix-noop: reprovou Testes do escopo continuam verdes sem a correção (no-op ou teste que sempre passa)
+$ echo $?
+1
+```
+
+O teste do commit era `assertTrue(callable(calc.soma))`: passa com o defeito e com o conserto. São
+três portões, todos determinísticos (git, regex e o seu runner): `fix-noop`, `stub-neutro` (classe
+nova que cumpre o contrato devolvendo `[]` em tudo) e `em-dash`. Rodam no pre-commit e no CI:
+[docs/portoes-no-commit.md](docs/portoes-no-commit.md).
+
+## E não resolva duas vezes
+
+O ledger registra o erro, guarda a correção pela **assinatura** do erro e a devolve quando ele
+reaparece. `err` ao falhar, `fix` ao resolver, `find` para consultar. Quando não há nada parecido
+com confiança, ele diz isso em vez de chutar. Python puro (stdlib), um SQLite.
+
+## Por que não é mais uma memória para agente
+
+- **Determinístico**: assinatura normalizada, FTS5 e regex. A mesma entrada dá a mesma saída.
+- **Zero dependência**: stdlib do Python 3.9+, um arquivo SQLite, nenhuma rede.
+- **Correção presa a teste**: `fix --test` aponta o teste de regressão, e o `fix-noop` prova que ele falha sem a correção.
+- **Sabe dizer não sei**: todo achado sai como `match` ou `talvez`; abaixo do piso a resposta é `abstain` ([docs/busca-e-juiz.md](docs/busca-e-juiz.md)).
+- **Mede o próprio efeito**: cada pista mostrada é registrada, o desfecho da task fecha a conta, e `erratum efeito` compara quem recebeu `match` com quem ficou sem pista.
 
 ## Instalar
 
@@ -15,8 +51,12 @@ python3 -c "import sqlite3; sqlite3.connect(':memory:').execute('create virtual 
 ```sh
 pipx install git+https://github.com/<org>/erratum     # recomendado: comando global `erratum`
 pip install git+https://github.com/<org>/erratum      # dentro de um venv
+pipx install erratum-cli                               # pelo índice, quando a versão estiver publicada
 git clone https://github.com/<org>/erratum && PYTHONPATH=$PWD/erratum python3 -m erratum top   # sem instalar
 ```
+
+O pacote no índice se chama `erratum-cli` (o nome `erratum` já tinha dono); o comando continua
+`erratum` e o import continua `import erratum`.
 
 Primeiro uso: semeie o ledger.
 
@@ -45,12 +85,18 @@ erratum err "Exit code 1 /tmp/w-99/bin/runner: No such file"
 #   correção conhecida: rodar o prep do worktree antes do runner [ref: abc123, teste: test_prep]
 
 erratum find "bin/runner no such file"
-# 1. [fts] exit code N /PATH: no such file
+# 1. [fts] talvez (0.30) exit code N /PATH: no such file
 #    correção: rodar o prep do worktree antes do runner [ref: abc123, teste: test_prep]
+
+erratum find "a tela de login ficou azul"
+# nada parecido com confiança no ledger
 ```
 
-A assinatura normaliza o que é volátil (caminhos viram `/PATH`, números viram `N`, contador de
-rodada some), então uma correção cobre as ocorrências passadas e as futuras.
+A assinatura normaliza o que é volátil (caminhos viram `/PATH`, números viram `N`, nome de branch
+vira `<branch>`, hash de commit vira `<sha>`, valor em dinheiro vira `<valor>`, o prefixo de quem
+reportou e o contador de rodada somem), então uma correção cobre as ocorrências passadas e as
+futuras. A regra tem versão: depois de atualizar o erratum, `err` e `find` avisam no stderr quando o
+banco foi gravado com a regra antiga, e `erratum reindex [--dry-run]` recalcula tudo numa transação.
 
 ## Comandos
 
@@ -58,11 +104,14 @@ rodada some), então uma correção cobre as ocorrências passadas e as futuras.
 |---|---|
 | `seed [--list]` | carrega as correções genéricas embarcadas (idempotente); `--list` só mostra |
 | `err "<texto>" [--stage --tool --kind --task]` | registra o erro e já devolve a correção conhecida: a melhor pista vem inteira, as demais em uma linha (`talvez:`) |
-| `fix <id\|texto> "<nota>" [--ref --test]` | registra a correção pela assinatura do erro |
-| `find "<texto>" [-n N] [--resolved]` | busca no ledger (assinatura, depois FTS); `--resolved` fica só com achados que já têm correção (o `-n` vale depois desse filtro); não registra |
+| `fix <id\|texto> "<nota>" [--ref --test --task]` | registra a correção pela assinatura do erro; com `--task`, fecha as pistas da task como `resolveu` |
+| `find "<texto>" [-n N] [--resolved]` | busca no ledger (assinatura, depois FTS); `--resolved` fica só com achados que já têm correção (o `-n` vale depois desse filtro); cada achado traz veredito e confiança; não registra, salvo `--registrar [--task]` |
 | `top [--days N] [--all-projects] [--resolved]` | lista o que se repete, agrupado por assinatura (não resolvido primeiro, peso `max(tasks, 1)`, depois ocorrências), e a taxa de reprovação de cada portão |
 | `win "<o que>" [--task --cost]` | registra um acerto |
-| `gate <portões> --base <ref> [--worktree DIR] [--test-cmd "..."]` | roda portões determinísticos no diff e grava o veredito |
+| `gate <portões> --base <ref> [--worktree DIR] [--test-cmd "..."]` | roda portões determinísticos no diff e grava o veredito; `--staged` julga o índice (pre-commit) |
+| `desfecho <task> <resolveu\|nao_resolveu\|descartado>` | fecha as pistas abertas da task |
+| `efeito [--days N]` | por origem e por veredito: pistas, % com desfecho, % `resolveu`; e tasks com `match` contra tasks sem pista, com o N ao lado |
+| `reindex [--dry-run]` | recalcula as assinaturas gravadas com a regra atual e reconstrói o FTS |
 | `scan <stream.jsonl>` | minera os `tool_result` com `is_error` de um stream-json de agente |
 | `import <arquivo.jsonl>` | carrega erros de um JSONL genérico |
 
@@ -105,6 +154,15 @@ erratum import historico.jsonl
 opcionais. Só `text` é obrigatório: sem `project` vale o `--project`, sem `ts` vale agora. Os dois
 são idempotentes (`import_key` é o hash da linha), então reler a mesma fonte não duplica nada.
 
+## Medir se a pista ajudou (`desfecho` e `efeito`)
+
+Cada pista que o `err` mostra vira uma linha (task, origem, veredito, confiança); quando ele se cala,
+a linha é `abstain`. `fix --task`, `win --task` ou `erratum desfecho <task> ...` fecham as linhas da
+task. `erratum efeito` então mostra a taxa de `resolveu` das tasks que receberam `match`, das que
+ficaram sem pista e a geral, sempre com o N do grupo, e escreve `amostra pequena, não conclua`
+quando N < 30. É comparação observacional, não experimento: serve para ver se vale manter a pista
+ligada, não para provar causa.
+
 ## Busca externa (`ERRATUM_SEARCH_CMD`)
 
 Se a variável existir, `find` e `err` rodam também o seu comando, com a consulta como último
@@ -115,7 +173,8 @@ export ERRATUM_SEARCH_CMD="minha-busca --limite 5"   # roda: minha-busca --limit
 ```
 
 Sem shell, limite de 10 segundos. Saída diferente de 0, timeout ou comando inexistente viram aviso no stderr e a
-busca segue só com o ledger.
+busca segue só com o ledger. Para decidir entre candidatos em dúvida existe o `ERRATUM_JUDGE_CMD`,
+também opcional: [docs/busca-e-juiz.md](docs/busca-e-juiz.md).
 
 ## Usar com a sua IA
 
@@ -140,6 +199,9 @@ a integração por `--json` estão em [docs/usar-com-ia.md](docs/usar-com-ia.md)
 `(correcao, inseriu)`, no mesmo espírito de `registrar_erro_importado`.
 `Ledger.buscar(texto, n=5, so_resolvidos=False)` com `so_resolvidos=True` devolve só achados
 com correção; o `n` corta depois do filtro.
+`Ledger.decidir(texto, n=5, so_resolvidos=False)` devolve `Decisao(veredito, confianca, achados)`;
+`buscar` devolve só os achados dela. `Ledger.registrar_desfecho(task, desfecho, projeto=None)`,
+`Ledger.efeito(projeto=None, dias=None)` e `Ledger.reindexar(simular=False)` espelham os comandos.
 `Semeador(ledger, caminho=None).semear()` carrega um JSON de sementes (o embarcado, ou o do seu
 time) e devolve quantas entraram; `Ledger.registrar_semente(dict)` grava uma.
 
@@ -157,7 +219,7 @@ para vários usuários, o que não fazer (volume de rede) e backup:
 - **Não é memória geral**: guarda erro, correção, acerto e veredito de portão. Preferência, decisão
   de produto e contexto de projeto vão para a memória do seu agente.
 - **Não usa embeddings nem modelo**: assinatura normalizada e FTS5. Se quiser busca semântica,
-  plugue a sua por `ERRATUM_SEARCH_CMD`.
+  plugue a sua por `ERRATUM_SEARCH_CMD`; se quiser um juiz para os casos em dúvida, `ERRATUM_JUDGE_CMD`.
 - **Não sincroniza entre máquinas.**
 
 ## Privacidade

@@ -13,6 +13,8 @@ jobs:
         python: ["3.9", "3.12"]
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
@@ -24,3 +26,8 @@ jobs:
           git config --global user.name "ci"
       - name: Testes
         run: python -m unittest -v
+      - name: Portões no diff do pull request
+        if: github.event_name == 'pull_request'
+        env:
+          ERRATUM_DB: ${{ runner.temp }}/erratum-ci.db
+        run: python -m erratum gate em-dash,stub-neutro,fix-noop --base origin/main --test-cmd "python -B -m unittest"
