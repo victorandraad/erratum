@@ -6,6 +6,8 @@ import time
 from contextlib import contextmanager
 from pathlib import Path
 
+from erratum.dominio import Assinatura
+
 
 _SCHEMA = (
     """
@@ -65,6 +67,12 @@ _SCHEMA = (
     "CREATE INDEX IF NOT EXISTS idx_errors_signature ON errors(signature)",
     "CREATE INDEX IF NOT EXISTS idx_fixes_signature ON fixes(signature)",
     "CREATE INDEX IF NOT EXISTS idx_errors_project_ts ON errors(project, ts)",
+    """
+    CREATE TABLE IF NOT EXISTS meta (
+        key TEXT PRIMARY KEY,
+        value TEXT
+    )
+    """,
 )
 
 
@@ -126,6 +134,43 @@ class Banco:
                 # IF NOT EXISTS nao cobre todas as corridas no CREATE VIRTUAL
                 if "already exists" not in str(e).lower():
                     raise
+        self._carimbar_regra_se_vazio(con)
+
+    def _carimbar_regra_se_vazio(self, con):
+        achou = con.execute(
+            "SELECT 1 FROM meta WHERE key = 'regra_assinatura'"
+        ).fetchone()
+        if achou is not None:
+            return
+        n = con.execute(
+            "SELECT (SELECT COUNT(*) FROM errors)"
+            " + (SELECT COUNT(*) FROM fixes)"
+        ).fetchone()[0]
+        if n:
+            return
+        try:
+            con.execute(
+                "INSERT OR IGNORE INTO meta(key, value)"
+                " VALUES ('regra_assinatura', ?)",
+                (str(Assinatura.VERSAO),),
+            )
+        except sqlite3.IntegrityError:
+            pass
+
+    def versao_da_regra(self):
+        try:
+            linhas = self.consultar(
+                "SELECT value FROM meta WHERE key = ?",
+                ("regra_assinatura",),
+            )
+        except sqlite3.OperationalError:
+            return None
+        if not linhas or linhas[0]["value"] is None:
+            return None
+        try:
+            return int(linhas[0]["value"])
+        except (TypeError, ValueError):
+            return None
 
     @contextmanager
     def transacao(self):

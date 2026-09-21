@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 
 from erratum.busca import BuscaEmCascata, BuscaExterna, BuscaFTS, BuscaPorAssinatura
 from erratum.dominio import Acerto, Assinatura, Correcao, Erro, VereditoDePortao
+from erratum.reindex import Reindexador
 from erratum.repositorios import (
     RepositorioDeAcertos,
     RepositorioDeCorrecoes,
@@ -22,13 +23,25 @@ def _agora_utc():
 
 
 class Ledger:
-    def __init__(self, erros, correcoes, portoes, acertos, buscador, relogio):
+    def __init__(
+        self,
+        erros,
+        correcoes,
+        portoes,
+        acertos,
+        buscador,
+        relogio,
+        reindexador=None,
+        banco=None,
+    ):
         self._erros = erros
         self._correcoes = correcoes
         self._portoes = portoes
         self._acertos = acertos
         self._buscador = buscador
         self._relogio = relogio
+        self._reindexador = reindexador
+        self._banco = banco
 
     @classmethod
     def sobre(cls, banco, relogio=None, ambiente=None, aviso=None):
@@ -48,7 +61,28 @@ class Ledger:
         if cmd:
             buscadores.append(BuscaExterna(cmd, aviso=aviso))
         buscador = BuscaEmCascata(buscadores)
-        return cls(erros, correcoes, portoes, acertos, buscador, relogio)
+        return cls(
+            erros,
+            correcoes,
+            portoes,
+            acertos,
+            buscador,
+            relogio,
+            reindexador=Reindexador(banco),
+            banco=banco,
+        )
+
+    def regra_desatualizada(self):
+        if self._banco is None:
+            return True
+        versao = self._banco.versao_da_regra()
+        return versao is None or versao < Assinatura.VERSAO
+
+    def reindexar(self, simular=False):
+        reindexador = self._reindexador
+        if reindexador is None:
+            reindexador = Reindexador(self._banco)
+        return reindexador.rodar(simular=simular)
 
     def _ts(self):
         return self._relogio().isoformat(timespec="microseconds")

@@ -85,9 +85,16 @@ class WorktreeDoGate:
 class Comando(ABC):
     nome = ""
 
-    def __init__(self, entrada, saida):
+    def __init__(self, entrada, saida, aviso=None):
         self._entrada = entrada
         self._saida = saida
+        self._aviso = sys.stderr if aviso is None else aviso
+
+    def _avisar_regra_antiga(self, ledger):
+        if ledger.regra_desatualizada():
+            self._aviso.write(
+                "assinaturas com regra antiga: rode erratum reindex\n"
+            )
 
     @abstractmethod
     def configurar(self, parser):
@@ -117,6 +124,7 @@ class ComandoErr(Comando):
         parser.add_argument("--task", default="")
 
     def executar(self, args, ledger):
+        self._avisar_regra_antiga(ledger)
         texto = self._ler_texto(args.texto)
         contexto = {}
         if args.task:
@@ -280,8 +288,8 @@ class ComandoWin(Comando):
 class ComandoGate(Comando):
     nome = "gate"
 
-    def __init__(self, entrada, saida, worktree_do_gate=None):
-        super().__init__(entrada, saida)
+    def __init__(self, entrada, saida, worktree_do_gate=None, aviso=None):
+        super().__init__(entrada, saida, aviso=aviso)
         self._worktree_do_gate = worktree_do_gate or WorktreeDoGate()
 
     def configurar(self, parser):
@@ -345,6 +353,7 @@ class ComandoFind(Comando):
         parser.add_argument("--resolved", action="store_true")
 
     def executar(self, args, ledger):
+        self._avisar_regra_antiga(ledger)
         texto = self._ler_texto(args.texto)
         achados = ledger.buscar(
             texto, n=args.n, so_resolvidos=args.resolved
@@ -390,8 +399,8 @@ def _ler_dicts_jsonl(caminho):
 class ComandoScan(Comando):
     nome = "scan"
 
-    def __init__(self, entrada, saida, minerador=None):
-        super().__init__(entrada, saida)
+    def __init__(self, entrada, saida, minerador=None, aviso=None):
+        super().__init__(entrada, saida, aviso=aviso)
         self._minerador = minerador or MineradorDeStream()
 
     def configurar(self, parser):
@@ -472,6 +481,24 @@ class ComandoSeed(Comando):
         return 0
 
 
+class ComandoReindex(Comando):
+    nome = "reindex"
+
+    def configurar(self, parser):
+        parser.add_argument("--dry-run", action="store_true")
+
+    def executar(self, args, ledger):
+        r = ledger.reindexar(simular=args.dry_run)
+        if args.json:
+            self._escrever_json(asdict(r))
+            return 0
+        extra = " (simulado)" if r.simulado else ""
+        self._saida.write(
+            "reindex%s: %d -> %d assinaturas\n" % (extra, r.antes, r.depois)
+        )
+        return 0
+
+
 class ComandoImport(Comando):
     nome = "import"
 
@@ -511,24 +538,27 @@ class Cli:
         saida=None,
         projeto_padrao=None,
         comandos=None,
+        aviso=None,
     ):
         self._fabrica_de_ledger = fabrica_de_ledger
         self._entrada = sys.stdin if entrada is None else entrada
         self._saida = sys.stdout if saida is None else saida
+        self._aviso = sys.stderr if aviso is None else aviso
         if projeto_padrao is None:
             projeto_padrao = ProjetoAtual()
         self._projeto_padrao = projeto_padrao
         if comandos is None:
             comandos = [
-                ComandoErr(self._entrada, self._saida),
-                ComandoFix(self._entrada, self._saida),
-                ComandoFind(self._entrada, self._saida),
-                ComandoTop(self._entrada, self._saida),
-                ComandoWin(self._entrada, self._saida),
-                ComandoGate(self._entrada, self._saida),
-                ComandoScan(self._entrada, self._saida),
-                ComandoImport(self._entrada, self._saida),
-                ComandoSeed(self._entrada, self._saida),
+                ComandoErr(self._entrada, self._saida, aviso=self._aviso),
+                ComandoFix(self._entrada, self._saida, aviso=self._aviso),
+                ComandoFind(self._entrada, self._saida, aviso=self._aviso),
+                ComandoTop(self._entrada, self._saida, aviso=self._aviso),
+                ComandoWin(self._entrada, self._saida, aviso=self._aviso),
+                ComandoGate(self._entrada, self._saida, aviso=self._aviso),
+                ComandoScan(self._entrada, self._saida, aviso=self._aviso),
+                ComandoImport(self._entrada, self._saida, aviso=self._aviso),
+                ComandoSeed(self._entrada, self._saida, aviso=self._aviso),
+                ComandoReindex(self._entrada, self._saida, aviso=self._aviso),
             ]
         self._comandos = list(comandos)
 
