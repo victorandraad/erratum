@@ -15,7 +15,6 @@ from erratum.dominio import (
     Erro,
     VereditoDePortao,
 )
-from erratum.reindex import Reindexador
 from erratum.receitas import (
     RepositorioDeReceitas,
     RepositorioDeUsos,
@@ -114,7 +113,6 @@ class Ledger:
             acertos,
             buscador,
             relogio,
-            reindexador=Reindexador(banco),
             banco=banco,
             limiar=limiar,
             juiz=juiz,
@@ -131,6 +129,8 @@ class Ledger:
         return versao is None or versao < Assinatura.VERSAO
 
     def reindexar(self, simular=False):
+        from erratum.reindex import Reindexador
+
         reindexador = self._reindexador
         if reindexador is None:
             reindexador = Reindexador(self._banco)

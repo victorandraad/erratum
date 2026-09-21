@@ -14,9 +14,6 @@ from erratum.banco import Banco
 from erratum.decisao import Decisao
 from erratum.ledger import ErroNaoEncontrado, Ledger
 from erratum.receitas import Receita
-from erratum.mineracao import ImportadorJsonl, MineradorDeStream
-from erratum.portoes import PORTOES, DiffDoDev
-from erratum.sementes import Semeador
 
 _MSG_ABSTAIN = "nada parecido com confiança no ledger"
 
@@ -346,6 +343,8 @@ class ComandoGate(Comando):
         parser.add_argument("--staged", action="store_true")
 
     def executar(self, args, ledger):
+        from erratum.portoes import PORTOES, DiffDoDev
+
         nomes = [n.strip() for n in args.lista.split(",") if n.strip()]
         if not nomes or any(n not in PORTOES for n in nomes):
             return 2
@@ -423,15 +422,28 @@ class ComandoHow(Comando):
         if decisao.veredito == "abstain":
             self._saida.write("sem receita pra isso\n")
             return 0
-        for achado in achados:
+        for i, achado in enumerate(achados, 1):
             rec = achado.receita
             if rec is None:
                 continue
-            self._saida.write("%s  %s\n" % (rec.nome, rec.comando))
-            if rec.perigo:
-                self._saida.write("%s\n" % rec.perigo)
+            self._saida.write(
+                "%d. [%s] %s (%.2f) %s\n"
+                % (
+                    i,
+                    achado.origem,
+                    achado.veredito,
+                    achado.confianca,
+                    rec.nome,
+                )
+            )
+            if rec.quando:
+                self._saida.write("   quando: %s\n" % rec.quando)
+            if rec.comando:
+                self._saida.write("   rode: %s\n" % rec.comando)
             if rec.notas:
-                self._saida.write("%s\n" % rec.notas)
+                self._saida.write("   notas: %s\n" % rec.notas)
+            if rec.perigo:
+                self._saida.write("   perigo: %s\n" % rec.perigo)
         return 0
 
 
@@ -517,12 +529,16 @@ class ComandoScan(Comando):
 
     def __init__(self, entrada, saida, minerador=None, aviso=None):
         super().__init__(entrada, saida, aviso=aviso)
-        self._minerador = minerador or MineradorDeStream()
+        self._minerador = minerador
 
     def configurar(self, parser):
         parser.add_argument("caminho")
 
     def executar(self, args, ledger):
+        if self._minerador is None:
+            from erratum.mineracao import MineradorDeStream
+
+            self._minerador = MineradorDeStream()
         caminho = Path(args.caminho)
         try:
             eventos = _ler_dicts_jsonl(caminho)
@@ -598,6 +614,8 @@ class ComandoSeed(Comando):
         parser.add_argument("--list", action="store_true")
 
     def executar(self, args, ledger):
+        from erratum.sementes import Semeador
+
         semeador = Semeador(ledger)
         sementes = semeador.sementes()
         receitas = semeador.receitas()
@@ -630,6 +648,10 @@ class ComandoSeed(Comando):
             )
             return 0
         self._saida.write("semeou %d novas (total %d)\n" % (novas, total))
+        self._saida.write(
+            "receitas: %d novas (total %d)\n"
+            % (receitas_novas, receitas_total)
+        )
         return 0
 
 
@@ -827,6 +849,8 @@ class ComandoImport(Comando):
             texto = caminho.read_text(encoding="utf-8")
         except (OSError, UnicodeError):
             return 2
+        from erratum.mineracao import ImportadorJsonl
+
         relatorio = ImportadorJsonl(ledger).importar(
             texto.splitlines(), args.project
         )
@@ -923,3 +947,24 @@ def main(argv=None):
         os.dup2(devnull, sys.stdout.fileno())
         sys.exit(0)
     sys.exit(codigo)
+
+
+def __getattr__(name):
+    if name in ("PORTOES", "DiffDoDev"):
+        from erratum.portoes import PORTOES, DiffDoDev
+
+        globals()["PORTOES"] = PORTOES
+        globals()["DiffDoDev"] = DiffDoDev
+        return globals()[name]
+    if name in ("MineradorDeStream", "ImportadorJsonl"):
+        from erratum.mineracao import ImportadorJsonl, MineradorDeStream
+
+        globals()["ImportadorJsonl"] = ImportadorJsonl
+        globals()["MineradorDeStream"] = MineradorDeStream
+        return globals()[name]
+    if name == "Semeador":
+        from erratum.sementes import Semeador
+
+        globals()["Semeador"] = Semeador
+        return Semeador
+    raise AttributeError("module %r has no attribute %r" % (__name__, name))
