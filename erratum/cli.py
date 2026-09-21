@@ -138,9 +138,11 @@ class ComandoErr(Comando):
             "erro #%d registrado [%s] assinatura: %s\n"
             % (erro.id, erro.projeto, erro.assinatura)
         )
-        for pista in pistas:
+        for i, pista in enumerate(pistas):
             for correcao in pista.correcoes:
-                self._saida.write(_linha_pista(correcao))
+                self._saida.write(
+                    _linha_pista(correcao) if i == 0 else _linha_pista_curta(correcao)
+                )
         return 0
 
 
@@ -186,6 +188,14 @@ def _sufixo_de_correcao(correcao):
     if correcao.teste:
         extra.append("teste: %s" % correcao.teste)
     return " [%s]" % ", ".join(extra) if extra else ""
+
+
+def _linha_pista_curta(correcao):
+    # só a primeira pista vem inteira; o resto é candidato fraco da busca por texto
+    return "  talvez: %s%s\n" % (
+        correcao.nota.split("\n", 1)[0],
+        _sufixo_de_correcao(correcao),
+    )
 
 
 def _linha_pista(correcao):

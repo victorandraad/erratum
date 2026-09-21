@@ -150,6 +150,12 @@ class TestErrAchaASemente(CasoComLedger):
         _codigo, saida = self.cli("err", VARIACOES[2][0], "--project", "loja")
         self.assertIn("semente:git-cannot-lock-ref", saida)
 
+    def test_saida_humana_so_detalha_a_primeira_pista(self):
+        # com sementes quase todo erro casa com várias: a primeira vem inteira, as outras em uma linha
+        _codigo, saida = self.cli("err", "ci segue vermelho após 3 tentativas", "--project", "loja")
+        self.assertEqual(saida.count("Causa:"), 1)
+        self.assertGreater(saida.count("semente:"), 1)
+
     def test_ruido_sem_correcao_nao_esconde_a_semente(self):
         # muitos erros parecidos e SEM correção não podem empurrar a semente pra fora das pistas
         for i in range(12):
