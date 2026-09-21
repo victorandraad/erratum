@@ -34,7 +34,8 @@ _SCHEMA = (
         ref TEXT,
         test TEXT,
         source TEXT,
-        import_key TEXT UNIQUE
+        import_key TEXT UNIQUE,
+        receita TEXT
     )
     """,
     """
@@ -79,10 +80,47 @@ _SCHEMA = (
         desfecho_ts TEXT
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS receitas (
+        id INTEGER PRIMARY KEY,
+        ts TEXT,
+        project TEXT,
+        nome TEXT,
+        quando TEXT,
+        comando TEXT,
+        notas TEXT,
+        perigo TEXT,
+        em_vez_de_json TEXT,
+        origem TEXT,
+        import_key TEXT UNIQUE,
+        UNIQUE(project, nome),
+        CHECK(origem IN ('manual', 'semente'))
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS usos_de_receita (
+        id INTEGER PRIMARY KEY,
+        ts TEXT,
+        project TEXT,
+        task TEXT,
+        receita_id INTEGER,
+        comando TEXT,
+        tipo TEXT,
+        import_key TEXT,
+        CHECK(tipo IN ('consulta', 'desvio', 'uso'))
+    )
+    """,
+    """
+    CREATE VIRTUAL TABLE IF NOT EXISTS receitas_fts USING fts5(
+        signature, text, note, src UNINDEXED,
+        tokenize='unicode61 remove_diacritics 2'
+    )
+    """,
     "CREATE INDEX IF NOT EXISTS idx_errors_signature ON errors(signature)",
     "CREATE INDEX IF NOT EXISTS idx_fixes_signature ON fixes(signature)",
     "CREATE INDEX IF NOT EXISTS idx_errors_project_ts ON errors(project, ts)",
     "CREATE INDEX IF NOT EXISTS idx_pistas_project_task ON pistas(project, task)",
+    "CREATE INDEX IF NOT EXISTS idx_usos_de_receita_project_ts ON usos_de_receita(project, ts)",
     """
     CREATE TABLE IF NOT EXISTS meta (
         key TEXT PRIMARY KEY,
@@ -150,7 +188,34 @@ class Banco:
                 # IF NOT EXISTS nao cobre todas as corridas no CREATE VIRTUAL
                 if "already exists" not in str(e).lower():
                     raise
+        self._migrar_coluna(con, "fixes", "receita", "TEXT")
+        self._migrar_coluna(con, "usos_de_receita", "import_key", "TEXT")
+        try:
+            con.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS "
+                "idx_usos_de_receita_import_key ON usos_de_receita(import_key)"
+            )
+        except sqlite3.OperationalError as e:
+            if "already exists" not in str(e).lower():
+                raise
         self._carimbar_regra_se_vazio(con)
+
+    def _migrar_coluna(self, con, tabela, coluna, definicao):
+        try:
+            colunas = {
+                linha[1] for linha in con.execute("PRAGMA table_info(%s)" % tabela)
+            }
+        except sqlite3.OperationalError:
+            return
+        if coluna in colunas:
+            return
+        try:
+            con.execute(
+                "ALTER TABLE %s ADD COLUMN %s %s" % (tabela, coluna, definicao)
+            )
+        except sqlite3.OperationalError as e:
+            if "duplicate column" not in str(e).lower():
+                raise
 
     def _carimbar_regra_se_vazio(self, con):
         achou = con.execute(

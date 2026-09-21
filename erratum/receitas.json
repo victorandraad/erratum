@@ -1,0 +1,50 @@
+[
+  {
+    "slug": "esperar-ci-do-pr",
+    "quando": "esperar o CI de um pull request terminar sem poll manual",
+    "comando": "gh pr checks <pr> --watch --fail-fast",
+    "em_vez_de": [
+      "(?:while\\s|until\\s|sleep\\s+\\d+)[\\s\\S]{0,200}gh\\s+(pr\\s+checks|run\\s+view)"
+    ],
+    "notas": "o --watch bloqueia ate os checks fecharem",
+    "perigo": "rode em background"
+  },
+  {
+    "slug": "consultar-sqlite-sem-o-binario",
+    "quando": "consultar um sqlite quando o binario sqlite3 nao esta instalado",
+    "comando": "python3 -c \"import sqlite3,sys; [print(*l, sep='|') for l in sqlite3.connect(sys.argv[1]).execute(sys.argv[2])]\" <db> <sql>",
+    "em_vez_de": [
+      "python3?\\s+-(?:c|\\s*<<)[\\s\\S]{0,400}sqlite3"
+    ],
+    "notas": "o binario sqlite3 e o caminho curto; isto e o fallback"
+  },
+  {
+    "slug": "suite-com-estado-isolado",
+    "quando": "rodar a suite com diretorio de estado isolado e descartavel",
+    "comando": "APP_STATE_DIR=\"$(mktemp -d)\" python3 -m unittest discover tests",
+    "em_vez_de": [
+      "(?:APP_STATE_DIR|DATA_HOME)=/tmp[\\s\\S]{0,80}(?:python3?\\s+-m\\s+(?:unittest|pytest)|pytest)"
+    ],
+    "notas": "use mktemp -d, nao um caminho fixo em /tmp"
+  },
+  {
+    "slug": "worktree-para-trabalho-isolado",
+    "quando": "isolar trabalho num worktree em vez de copiar o repositorio",
+    "comando": "git worktree add -b <branch> <dir> <base>",
+    "em_vez_de": [
+      "git\\s+clone\\s+\\.\\s",
+      "cp\\s+-r\\s+\\.\\s",
+      "rsync\\s+-a\\s+\\./"
+    ],
+    "notas": "worktree reusa o objeto store; clone/cp/rsync da raiz nao"
+  },
+  {
+    "slug": "reiniciar-servico-com-saude",
+    "quando": "reiniciar um servico e esperar a saude responder",
+    "comando": "systemctl restart <servico> && timeout 60 sh -c 'until curl -fsS http://127.0.0.1:8080/health >/dev/null; do sleep 2; done'",
+    "em_vez_de": [
+      "(?:systemctl\\s+restart|service\\s+\\S+\\s+restart)[\\s\\S]{0,80}sleep[\\s\\S]{0,80}curl"
+    ],
+    "notas": "sleep fixo nao prova que o servico subiu"
+  }
+]

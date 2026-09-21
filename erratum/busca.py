@@ -50,9 +50,11 @@ class BuscaPorAssinatura(Buscador):
 class BuscaFTS(Buscador):
     _TOKEN = re.compile(r"\w{3,}")
 
-    def __init__(self, banco, correcoes):
+    def __init__(self, banco, correcoes, tabela="ledger_fts", montar=None):
         self._banco = banco
         self._correcoes = correcoes
+        self._tabela = tabela
+        self._montar = montar
 
     @staticmethod
     def consulta(texto):
@@ -80,16 +82,19 @@ class BuscaFTS(Buscador):
         return termos
 
     def _idf(self, termos):
+        vocab = "voc_" + self._tabela
         self._banco.consultar(
-            "CREATE VIRTUAL TABLE IF NOT EXISTS temp.ledger_voc "
-            "USING fts5vocab(main, ledger_fts, 'row')"
+            "CREATE VIRTUAL TABLE IF NOT EXISTS temp.%s "
+            "USING fts5vocab(main, %s, 'row')" % (vocab, self._tabela)
         )
-        n_docs = self._banco.consultar("SELECT COUNT(*) AS n FROM ledger_fts")
+        n_docs = self._banco.consultar(
+            "SELECT COUNT(*) AS n FROM %s" % self._tabela
+        )
         N = int(n_docs[0]["n"] if n_docs else 0)
         idfs = {}
         for termo in termos:
             linhas = self._banco.consultar(
-                "SELECT doc FROM temp.ledger_voc WHERE term = ?", (termo,)
+                "SELECT doc FROM temp.%s WHERE term = ?" % vocab, (termo,)
             )
             n = int(linhas[0]["doc"]) if linhas else 0
             idfs[termo] = math.log((N - n + 0.5) / (n + 0.5) + 1.0)
@@ -113,13 +118,15 @@ class BuscaFTS(Buscador):
         termos = self._termos(texto)
         try:
             idfs = self._idf(termos)
+            tabela = self._tabela
             linhas = self._banco.consultar(
                 """
-                SELECT signature, text, note, bm25(ledger_fts) AS rank
-                FROM ledger_fts
-                WHERE ledger_fts MATCH ?
+                SELECT signature, text, note, src, bm25(%s) AS rank
+                FROM %s
+                WHERE %s MATCH ?
                 ORDER BY rank, rowid
-                """,
+                """
+                % (tabela, tabela, tabela),
                 (consulta,),
             )
         except sqlite3.OperationalError:
@@ -141,6 +148,8 @@ class BuscaFTS(Buscador):
                         "pontuacao": linha["rank"],
                         "texto": texto_linha,
                         "cobertura": cob,
+                        "src": linha["src"] or "",
+                        "note": nota,
                     }
                 )
                 continue
@@ -151,20 +160,25 @@ class BuscaFTS(Buscador):
                 grupo["texto"] = texto_linha
         achados = []
         for grupo in grupos[:n]:
-            pontuacao = grupo["pontuacao"]
-            achados.append(
-                Achado(
-                    origem="fts",
-                    assinatura=grupo["assinatura"],
-                    texto=grupo["texto"],
-                    correcoes=tuple(
-                        self._correcoes.por_assinatura(grupo["assinatura"])
-                    ),
-                    pontuacao=0.0 if pontuacao is None else float(pontuacao),
-                    cobertura=grupo["cobertura"],
-                )
-            )
+            achado = self._achado_de(grupo)
+            if achado is not None:
+                achados.append(achado)
         return achados
+
+    def _achado_de(self, grupo):
+        if self._montar is not None:
+            return self._montar(grupo)
+        pontuacao = grupo["pontuacao"]
+        return Achado(
+            origem="fts",
+            assinatura=grupo["assinatura"],
+            texto=grupo["texto"],
+            correcoes=tuple(
+                self._correcoes.por_assinatura(grupo["assinatura"])
+            ),
+            pontuacao=0.0 if pontuacao is None else float(pontuacao),
+            cobertura=grupo["cobertura"],
+        )
 
 
 class BuscaExterna(Buscador):

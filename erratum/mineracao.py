@@ -82,6 +82,32 @@ class MineradorDeStream:
                     )
         return erros
 
+    def comandos_bash(self, eventos):
+        comandos = []
+        for evento in eventos:
+            if not isinstance(evento, dict):
+                continue
+            mensagem = evento.get("message")
+            if not isinstance(mensagem, dict):
+                continue
+            conteudo = mensagem.get("content")
+            if not isinstance(conteudo, list):
+                continue
+            for bloco in conteudo:
+                if not isinstance(bloco, dict):
+                    continue
+                if bloco.get("type") != "tool_use":
+                    continue
+                if bloco.get("name") != "Bash":
+                    continue
+                inp = bloco.get("input")
+                if not isinstance(inp, dict):
+                    continue
+                comando = inp.get("command")
+                if isinstance(comando, str) and comando:
+                    comandos.append((bloco.get("id") or "", comando))
+        return comandos
+
     def agregar(self, execucoes):
         grupos = {}
         for id_exec, eventos in execucoes:

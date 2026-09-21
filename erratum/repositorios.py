@@ -188,8 +188,8 @@ class RepositorioDeCorrecoes:
                     """
                     INSERT INTO fixes(
                         ts, project, signature, note, ref, test, source,
-                        import_key
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        import_key, receita
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         correcao.ts,
@@ -200,6 +200,7 @@ class RepositorioDeCorrecoes:
                         correcao.teste,
                         correcao.fonte,
                         chave_importacao,
+                        correcao.receita or "",
                     ),
                 )
                 novo_id = cur.lastrowid
@@ -237,8 +238,8 @@ class RepositorioDeCorrecoes:
                     """
                     INSERT INTO fixes(
                         ts, project, signature, note, ref, test, source,
-                        import_key
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        import_key, receita
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         correcao.ts,
@@ -249,6 +250,7 @@ class RepositorioDeCorrecoes:
                         correcao.teste,
                         correcao.fonte,
                         chave_importacao,
+                        correcao.receita or "",
                     ),
                 )
                 novo_id = cur.lastrowid
@@ -291,6 +293,7 @@ class RepositorioDeCorrecoes:
             ref=linha["ref"] or "",
             teste=linha["test"] or "",
             fonte=linha["source"] or "",
+            receita=(linha["receita"] or "") if "receita" in linha.keys() else "",
         )
 
 

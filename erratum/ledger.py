@@ -2,12 +2,25 @@ from __future__ import annotations
 
 import os
 from collections import defaultdict
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 
 from erratum.busca import BuscaEmCascata, BuscaExterna, BuscaFTS, BuscaPorAssinatura
 from erratum.decisao import Decisao, JuizExterno, Limiar
-from erratum.dominio import Acerto, Assinatura, Correcao, Erro, VereditoDePortao
+from erratum.dominio import (
+    Acerto,
+    Achado,
+    Assinatura,
+    Correcao,
+    Erro,
+    VereditoDePortao,
+)
 from erratum.reindex import Reindexador
+from erratum.receitas import (
+    RepositorioDeReceitas,
+    RepositorioDeUsos,
+    VerificadorDeComando,
+)
 from erratum.repositorios import (
     RepositorioDeAcertos,
     RepositorioDeCorrecoes,
@@ -39,6 +52,9 @@ class Ledger:
         limiar=None,
         juiz=None,
         pistas=None,
+        receitas=None,
+        usos=None,
+        verificador=None,
     ):
         self._erros = erros
         self._correcoes = correcoes
@@ -51,6 +67,9 @@ class Ledger:
         self._limiar = limiar if limiar is not None else Limiar()
         self._juiz = juiz
         self._pistas = pistas
+        self._receitas = receitas
+        self._usos = usos
+        self._verificador = verificador
 
     @classmethod
     def sobre(
@@ -85,6 +104,9 @@ class Ledger:
             juiz_cmd = ambiente.get("ERRATUM_JUDGE_CMD", "").strip()
             if juiz_cmd:
                 juiz = JuizExterno(juiz_cmd, aviso=aviso)
+        receitas = RepositorioDeReceitas(banco)
+        usos = RepositorioDeUsos(banco)
+        verificador = VerificadorDeComando(receitas, usos, relogio)
         return cls(
             erros,
             correcoes,
@@ -97,6 +119,9 @@ class Ledger:
             limiar=limiar,
             juiz=juiz,
             pistas=pistas,
+            receitas=receitas,
+            usos=usos,
+            verificador=verificador,
         )
 
     def regra_desatualizada(self):
@@ -213,7 +238,9 @@ class Ledger:
             return erro.assinatura
         return Assinatura(alvo).valor
 
-    def _montar_correcao(self, alvo, nota, projeto, ref, teste, fonte, ts):
+    def _montar_correcao(
+        self, alvo, nota, projeto, ref, teste, fonte, ts, receita=""
+    ):
         return Correcao(
             id=0,
             ts=self._ts() if ts is None else ts,
@@ -223,6 +250,7 @@ class Ledger:
             ref=ref,
             teste=teste,
             fonte=fonte,
+            receita=receita or "",
         )
 
     def registrar_correcao(
@@ -236,9 +264,10 @@ class Ledger:
         chave_importacao=None,
         ts=None,
         task="",
+        receita="",
     ):
         correcao = self._montar_correcao(
-            alvo, nota, projeto, ref, teste, fonte, ts
+            alvo, nota, projeto, ref, teste, fonte, ts, receita=receita
         )
         gravado = self._correcoes.inserir(
             correcao, chave_importacao=chave_importacao
@@ -356,6 +385,8 @@ class Ledger:
 
     def _origem_da_pista(self, achado):
         primeira = achado.correcoes[0] if achado.correcoes else None
+        if primeira is not None and primeira.receita:
+            return "receita"
         if primeira is not None and primeira.fonte == "semente":
             return "semente"
         if achado.decidido_por == "juiz":
@@ -405,6 +436,168 @@ class Ledger:
                 )
         self._pistas.inserir_varias(linhas)
 
+    def salvar_receita(self, receita):
+        return self._receitas.salvar(replace(receita, ts=self._ts()))
+
+    def inserir_semente_de_receita(self, receita, chave_importacao):
+        return self._receitas.inserir_semente(
+            replace(receita, ts=receita.ts or self._ts()), chave_importacao
+        )
+
+    def remover_receita(self, nome, projeto):
+        return self._receitas.remover(nome, projeto)
+
+    def receita_por_nome(self, nome, projeto):
+        return self._receitas.por_nome(nome, projeto)
+
+    def receitas_visiveis(self, projeto):
+        return self._receitas.visiveis(projeto)
+
+    def verificar_comando(self, comando, projeto, task="", chave_importacao=None):
+        return self._verificador.verificar(
+            comando, projeto, task, chave_importacao=chave_importacao
+        )
+
+    def decidir_receita(self, texto, projeto, n=5):
+        visiveis = {r.nome: r for r in self.receitas_visiveis(projeto)}
+
+        def montar(grupo):
+            receita = visiveis.get(grupo["assinatura"])
+            if receita is None:
+                return None
+            nota = "\n".join(
+                x for x in (receita.quando, receita.comando, receita.notas) if x
+            )
+            fake = Correcao(
+                id=0,
+                ts="",
+                projeto=receita.projeto,
+                assinatura=receita.nome,
+                nota=nota,
+                ref="",
+                teste="",
+                fonte="",
+                receita=receita.nome,
+            )
+            return Achado(
+                origem="fts",
+                assinatura=receita.nome,
+                texto=receita.quando,
+                correcoes=(fake,),
+                pontuacao=(
+                    0.0
+                    if grupo["pontuacao"] is None
+                    else float(grupo["pontuacao"])
+                ),
+                cobertura=grupo["cobertura"],
+                receita=receita,
+            )
+
+        buscador = BuscaFTS(
+            self._banco, self._correcoes, tabela="receitas_fts", montar=montar
+        )
+        pedido = n + 1
+        brutos = buscador.buscar(texto, pedido)
+        while len(brutos) >= pedido and len([a for a in brutos if a]) < n:
+            pedido *= 2
+            brutos = buscador.buscar(texto, pedido)
+            if len(brutos) < pedido:
+                break
+        classificados = self._limiar.classificar(brutos)
+        if self._juiz is not None:
+            classificados = self._juiz.julgar(
+                texto, Assinatura(texto).valor, classificados
+            )
+        return Decisao.de(list(classificados)[:n])
+
+    def consultar_receita(self, texto, projeto, task="", n=5):
+        decisao = self.decidir_receita(texto, projeto, n=n)
+        receita_id = None
+        if decisao.achados:
+            rec = decisao.achados[0].receita
+            if rec is not None:
+                receita_id = rec.id
+        self._usos.inserir(
+            projeto, task, receita_id, texto, "consulta", self._ts()
+        )
+        return decisao
+
+    def improvisos(self, projeto, dias=None):
+        if self._banco is None:
+            return []
+        desde = None
+        if dias is not None:
+            desde = (self._relogio() - timedelta(days=dias)).isoformat(
+                timespec="microseconds"
+            )
+        condicoes = ["u.tipo = 'desvio'"]
+        params = []
+        if projeto is not None:
+            condicoes.append("u.project = ?")
+            params.append(projeto)
+        if desde is not None:
+            condicoes.append("u.ts >= ?")
+            params.append(desde)
+        linhas = self._banco.consultar(
+            """
+            SELECT r.nome AS receita, COUNT(*) AS desvios
+            FROM usos_de_receita u
+            JOIN receitas r ON r.id = u.receita_id
+            WHERE """
+            + " AND ".join(condicoes)
+            + """
+            GROUP BY r.nome
+            ORDER BY desvios DESC, receita ASC
+            """,
+            tuple(params),
+        )
+        return [
+            {"receita": l["receita"], "desvios": int(l["desvios"] or 0)}
+            for l in linhas
+        ]
+
+    def _efeito_receitas(self, projeto, desde):
+        if self._banco is None:
+            return []
+        condicoes = ["u.tipo IN ('uso', 'desvio')"]
+        params = []
+        if projeto is not None:
+            condicoes.append("u.project = ?")
+            params.append(projeto)
+        if desde is not None:
+            condicoes.append("u.ts >= ?")
+            params.append(desde)
+        linhas = self._banco.consultar(
+            """
+            SELECT r.nome AS receita,
+                   SUM(CASE WHEN u.tipo = 'uso' THEN 1 ELSE 0 END) AS usos,
+                   SUM(CASE WHEN u.tipo = 'desvio' THEN 1 ELSE 0 END)
+                       AS desvios
+            FROM usos_de_receita u
+            JOIN receitas r ON r.id = u.receita_id
+            WHERE """
+            + " AND ".join(condicoes)
+            + """
+            GROUP BY r.nome
+            ORDER BY desvios DESC, receita ASC
+            """,
+            tuple(params),
+        )
+        saida = []
+        for l in linhas:
+            usos = int(l["usos"] or 0)
+            desvios = int(l["desvios"] or 0)
+            total = usos + desvios
+            saida.append(
+                {
+                    "receita": l["receita"],
+                    "usos": usos,
+                    "desvios": desvios,
+                    "taxa_de_uso": (usos / total) if total else None,
+                }
+            )
+        return saida
+
     def efeito(self, projeto=None, dias=None):
         desde = None
         if dias is not None:
@@ -414,7 +607,9 @@ class Ledger:
         linhas = []
         if self._pistas is not None:
             linhas = [dict(l) for l in self._pistas.listar(projeto, desde)]
-        return _agregar_efeito(linhas)
+        dado = _agregar_efeito(linhas)
+        dado["receitas"] = self._efeito_receitas(projeto, desde)
+        return dado
 
 
 def _agregar(items):

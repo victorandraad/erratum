@@ -13,6 +13,7 @@ from pathlib import Path
 from erratum.banco import Banco
 from erratum.decisao import Decisao
 from erratum.ledger import ErroNaoEncontrado, Ledger
+from erratum.receitas import Receita
 from erratum.mineracao import ImportadorJsonl, MineradorDeStream
 from erratum.portoes import PORTOES, DiffDoDev
 from erratum.sementes import Semeador
@@ -163,9 +164,15 @@ class ComandoErr(Comando):
             return 0
         for i, pista in enumerate(pistas):
             for correcao in pista.correcoes:
-                self._saida.write(
-                    _linha_pista(correcao) if i == 0 else _linha_pista_curta(correcao)
-                )
+                receita = None
+                if correcao.receita:
+                    receita = ledger.receita_por_nome(
+                        correcao.receita, args.project
+                    )
+                if i == 0:
+                    self._saida.write(_linha_pista(correcao, receita))
+                else:
+                    self._saida.write(_linha_pista_curta(correcao))
         return 0
 
 
@@ -178,6 +185,7 @@ class ComandoFix(Comando):
         parser.add_argument("--ref", default="")
         parser.add_argument("--test", default="")
         parser.add_argument("--task", default="")
+        parser.add_argument("--recipe", default=None)
 
     def executar(self, args, ledger):
         alvo = args.alvo
@@ -185,6 +193,10 @@ class ComandoFix(Comando):
             alvo = self._entrada.read().rstrip("\r\n")
         elif alvo.isdigit():
             alvo = int(alvo)
+        receita_nome = args.recipe or ""
+        if args.recipe:
+            if ledger.receita_por_nome(args.recipe, args.project) is None:
+                return 2
         try:
             correcao = ledger.registrar_correcao(
                 alvo,
@@ -193,6 +205,7 @@ class ComandoFix(Comando):
                 ref=args.ref,
                 teste=args.test,
                 task=args.task,
+                receita=receita_nome,
             )
         except ErroNaoEncontrado:
             return 2
@@ -223,11 +236,19 @@ def _linha_pista_curta(correcao):
     )
 
 
-def _linha_pista(correcao):
-    return "  correção conhecida: %s%s\n" % (
+def _linha_pista(correcao, receita=None):
+    texto = "  correção conhecida: %s%s\n" % (
         correcao.nota,
         _sufixo_de_correcao(correcao),
     )
+    if receita is not None:
+        texto += "  receita %s: %s\n" % (
+            receita.nome,
+            receita.comando_obrigatorio(),
+        )
+        if receita.perigo:
+            texto += "  perigo: %s\n" % receita.perigo
+    return texto
 
 
 class ComandoTop(Comando):
@@ -244,11 +265,13 @@ class ComandoTop(Comando):
             projeto, dias=args.days, resolvidos=args.resolved
         )
         taxas = ledger.taxa_de_portoes(projeto, dias=args.days)
+        improvisos = ledger.improvisos(projeto, dias=args.days)
         if args.json:
             self._escrever_json(
                 {
                     "padroes": [asdict(p) for p in padroes],
                     "portoes": [asdict(t) for t in taxas],
+                    "improvisos": improvisos,
                 }
             )
             return 0
@@ -260,6 +283,12 @@ class ComandoTop(Comando):
                 self._saida.write(
                     "%3dx  %d tasks  %-13s %s\n"
                     % (p.ocorrencias, p.tasks, estado, p.assinatura)
+                )
+        if improvisos:
+            self._saida.write("improvisos\n")
+            for item in improvisos:
+                self._saida.write(
+                    "%3dx  %s\n" % (item["desvios"], item["receita"])
                 )
         for t in taxas:
             julgados = t.rodadas - t.pulou
@@ -366,6 +395,44 @@ class ComandoGate(Comando):
                     "%s: %s %s\n" % (nome, r.veredito, r.motivo or r.detalhe)
                 )
         return 1 if any(r.reprovou for _, r in resultados) else 0
+
+
+class ComandoHow(Comando):
+    nome = "how"
+
+    def configurar(self, parser):
+        parser.add_argument("texto")
+        parser.add_argument("-n", type=int, default=5)
+        parser.add_argument("--task", default="")
+
+    def executar(self, args, ledger):
+        texto = self._ler_texto(args.texto)
+        decisao = ledger.consultar_receita(
+            texto, args.project, task=args.task, n=args.n
+        )
+        achados = list(decisao.achados)
+        if args.json:
+            self._escrever_json(
+                {
+                    "veredito": decisao.veredito,
+                    "confianca": decisao.confianca,
+                    "achados": [asdict(a) for a in achados],
+                }
+            )
+            return 0
+        if decisao.veredito == "abstain":
+            self._saida.write("sem receita pra isso\n")
+            return 0
+        for achado in achados:
+            rec = achado.receita
+            if rec is None:
+                continue
+            self._saida.write("%s  %s\n" % (rec.nome, rec.comando))
+            if rec.perigo:
+                self._saida.write("%s\n" % rec.perigo)
+            if rec.notas:
+                self._saida.write("%s\n" % rec.notas)
+        return 0
 
 
 class ComandoFind(Comando):
@@ -479,17 +546,37 @@ class ComandoScan(Comando):
             if inserido:
                 novos += 1
         grupos = self._minerador.agregar([(tarefa, eventos)])
+        desvios = 0
+        usos = 0
+        for id_uso, comando in self._minerador.comandos_bash(eventos):
+            chave = "scan-receita:" + _sha256(
+                tarefa + str(id_uso) + comando
+            )
+            resultado = ledger.verificar_comando(
+                comando,
+                args.project,
+                task=tarefa,
+                chave_importacao=chave,
+            )
+            if resultado.tipo == "desvio":
+                desvios += 1
+            elif resultado.tipo == "uso":
+                usos += 1
         if args.json:
             self._escrever_json(
                 {
                     "lidos": len(erros),
                     "novos": novos,
                     "grupos": [asdict(g) for g in grupos],
+                    "receitas": {"desvios": desvios, "usos": usos},
                 }
             )
             return 0
         self._saida.write(
             "scan: %d lidos, %d novos\n" % (len(erros), novos)
+        )
+        self._saida.write(
+            "receitas: %d desvios, %d usos\n" % (desvios, usos)
         )
         for grupo in grupos:
             self._saida.write(
@@ -513,18 +600,34 @@ class ComandoSeed(Comando):
     def executar(self, args, ledger):
         semeador = Semeador(ledger)
         sementes = semeador.sementes()
+        receitas = semeador.receitas()
         if args.list:
             if args.json:
-                self._escrever_json({"sementes": sementes})
+                self._escrever_json(
+                    {"sementes": sementes, "receitas": receitas}
+                )
                 return 0
             for semente in sementes:
                 frase = semente["erro"].split(".")[0].strip()
                 self._saida.write("%s  %s\n" % (semente["slug"], frase))
+            for receita in receitas:
+                self._saida.write(
+                    "%s  %s\n" % (receita["slug"], receita["quando"])
+                )
             return 0
         novas = semeador.semear()
+        receitas_novas = semeador.semear_receitas()
         total = len(sementes)
+        receitas_total = len(receitas)
         if args.json:
-            self._escrever_json({"novas": novas, "total": total})
+            self._escrever_json(
+                {
+                    "novas": novas,
+                    "total": total,
+                    "receitas_novas": receitas_novas,
+                    "receitas_total": receitas_total,
+                }
+            )
             return 0
         self._saida.write("semeou %d novas (total %d)\n" % (novas, total))
         return 0
@@ -569,7 +672,129 @@ class ComandoEfeito(Comando):
             if g["amostra_pequena"]:
                 linha += " amostra pequena, não conclua"
             self._saida.write(linha + "\n")
+        for r in dado.get("receitas") or []:
+            pct = int(round((r["taxa_de_uso"] or 0) * 100))
+            self._saida.write(
+                "receita %s: %d uso, %d desvios (%d%% pela receita)\n"
+                % (r["receita"], r["usos"], r["desvios"], pct)
+            )
         return 0
+
+
+class ComandoRecipe(Comando):
+    nome = "recipe"
+
+    def configurar(self, parser):
+        parser.add_argument("acao", choices=["add", "ls", "show", "rm"])
+        parser.add_argument("nome", nargs="?")
+        parser.add_argument("--quando", default=None)
+        parser.add_argument("--cmd", default=None)
+        parser.add_argument("--em-vez-de", action="append", default=None)
+        parser.add_argument("--notas", default="")
+        parser.add_argument("--perigo", default=None)
+
+    def executar(self, args, ledger):
+        if args.acao == "add":
+            return self._add(args, ledger)
+        if args.acao == "ls":
+            return self._ls(args, ledger)
+        if args.acao == "show":
+            return self._show(args, ledger)
+        if args.acao == "rm":
+            return self._rm(args, ledger)
+        return 2
+
+    def _add(self, args, ledger):
+        if not args.nome or not args.quando or not args.cmd:
+            return 2
+        receita = Receita(
+            id=0,
+            ts="",
+            projeto=args.project,
+            nome=args.nome,
+            quando=args.quando,
+            comando=args.cmd,
+            notas=args.notas or "",
+            perigo=args.perigo,
+            em_vez_de=tuple(args.em_vez_de or ()),
+            origem="manual",
+        )
+        try:
+            gravada = ledger.salvar_receita(receita)
+        except ValueError:
+            return 2
+        if args.json:
+            self._escrever_json({"receita": asdict(gravada)})
+            return 0
+        self._saida.write(
+            "receita %s registrada [%s]\n" % (gravada.nome, gravada.projeto)
+        )
+        return 0
+
+    def _ls(self, args, ledger):
+        receitas = ledger.receitas_visiveis(args.project)
+        if args.json:
+            self._escrever_json({"receitas": [asdict(r) for r in receitas]})
+            return 0
+        for r in receitas:
+            self._saida.write("%s  %s\n" % (r.nome, r.comando))
+        return 0
+
+    def _show(self, args, ledger):
+        if not args.nome:
+            return 2
+        receita = ledger.receita_por_nome(args.nome, args.project)
+        if receita is None:
+            return 2
+        if args.json:
+            self._escrever_json({"receita": asdict(receita)})
+            return 0
+        self._saida.write("%s  %s\n" % (receita.nome, receita.comando))
+        return 0
+
+    def _rm(self, args, ledger):
+        if not args.nome:
+            return 2
+        n = ledger.remover_receita(args.nome, args.project)
+        if not n:
+            return 2
+        if args.json:
+            self._escrever_json({"removeu": n})
+            return 0
+        self._saida.write("receita %s removida\n" % args.nome)
+        return 0
+
+
+class ComandoCheckCmd(Comando):
+    nome = "check-cmd"
+
+    def configurar(self, parser):
+        parser.add_argument("comando")
+        parser.add_argument("--task", default="")
+
+    def executar(self, args, ledger):
+        comando = self._ler_texto(args.comando)
+        resultado = ledger.verificar_comando(
+            comando, args.project, task=args.task
+        )
+        receita = resultado.receita
+        if args.json:
+            self._escrever_json(
+                {
+                    "tipo": resultado.tipo,
+                    "receita": None if receita is None else receita.nome,
+                    "comando": None if receita is None else receita.comando,
+                    "perigo": None if receita is None else receita.perigo,
+                }
+            )
+        elif resultado.tipo == "desvio" and receita is not None:
+            self._saida.write(
+                "use a receita %s: %s\n"
+                % (receita.nome, receita.comando_obrigatorio())
+            )
+            if receita.perigo:
+                self._saida.write("perigo: %s\n" % receita.perigo)
+        return 1 if resultado.tipo == "desvio" else 0
 
 
 class ComandoReindex(Comando):
@@ -643,6 +868,7 @@ class Cli:
                 ComandoErr(self._entrada, self._saida, aviso=self._aviso),
                 ComandoFix(self._entrada, self._saida, aviso=self._aviso),
                 ComandoFind(self._entrada, self._saida, aviso=self._aviso),
+                ComandoHow(self._entrada, self._saida, aviso=self._aviso),
                 ComandoTop(self._entrada, self._saida, aviso=self._aviso),
                 ComandoWin(self._entrada, self._saida, aviso=self._aviso),
                 ComandoGate(self._entrada, self._saida, aviso=self._aviso),
@@ -652,6 +878,8 @@ class Cli:
                 ComandoReindex(self._entrada, self._saida, aviso=self._aviso),
                 ComandoDesfecho(self._entrada, self._saida, aviso=self._aviso),
                 ComandoEfeito(self._entrada, self._saida, aviso=self._aviso),
+                ComandoRecipe(self._entrada, self._saida, aviso=self._aviso),
+                ComandoCheckCmd(self._entrada, self._saida, aviso=self._aviso),
             ]
         self._comandos = list(comandos)
 

@@ -153,6 +153,7 @@ class Correcao:
     ref: str
     teste: str
     fonte: str
+    receita: str = ""
 
 
 @dataclass(frozen=True)
@@ -208,3 +209,4 @@ class Achado:
     confianca: float = 0.0
     cobertura: float = 0.0
     decidido_por: str = "limiar"
+    receita: object = None

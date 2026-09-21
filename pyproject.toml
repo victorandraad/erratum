@@ -18,4 +18,4 @@ erratum = "erratum.cli:main"
 packages = ["erratum"]
 
 [tool.setuptools.package-data]
-erratum = ["sementes.json"]
+erratum = ["sementes.json", "receitas.json"]
