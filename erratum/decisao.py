@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import shlex
 import signal
@@ -243,7 +244,7 @@ class JuizExterno:
             self._falhou("confianca invalida")
             return achados
         confianca = float(confianca)
-        if confianca < 0.0 or confianca > 1.0:
+        if not math.isfinite(confianca) or confianca < 0.0 or confianca > 1.0:
             self._falhou("confianca invalida")
             return achados
         mesmo = dado.get("mesmo_erro")

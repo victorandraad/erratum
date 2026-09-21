@@ -470,7 +470,7 @@ def _agregar_efeito(linhas):
     for linha in linhas:
         task = linha.get("task") or ""
         if task:
-            por_task[task].append(linha)
+            por_task[(linha.get("project") or "", task)].append(linha)
     match_tasks = []
     abstain_tasks = []
     geral_tasks = []
