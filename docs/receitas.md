@@ -75,7 +75,9 @@ $ echo $?
 | nenhuma receita fala dele | nada | 0 | nada |
 
 "Já é a receita" é decidido antes do `em_vez_de`, então uma receita pode barrar a própria versão
-incompleta (a suíte sem a variável de estado) sem barrar a versão certa. O padrão canônico sai do
+incompleta (a suíte sem a variável de estado) sem barrar a versão certa. O canônico só protege a
+própria receita: se outra receita manda trocar aquele comando, vale o desvio. Quando duas receitas
+falam do mesmo comando, a do projeto vem antes da `geral`. O padrão canônico sai do
 campo `comando`: literal, com cada `<marcador>` valendo qualquer texto e o que vem depois do
 primeiro trecho opcional (` [--flag ...]`) ignorado.
 
@@ -84,7 +86,8 @@ primeiro trecho opcional (` [--flag ...]`) ignorado.
 A stdlib do Python não tem timeout de regex. As defesas são de tamanho:
 
 - a regex é validada na entrada (`re.compile`); inválida é uso errado (código 2);
-- no máximo 300 caracteres, e quantificador aninhado simples (`(a+)+`, `(\w*)*`) é recusado;
+- no máximo 300 caracteres; quantificador aninhado simples (`(a+)+`, `(\w*)*`) e alternativa sob
+  quantificador aberto (`(a|aa)+`) são recusados, e repetição gigante (`a{99999999999}`) também;
 - só os primeiros **4 KB** do comando são avaliados. Improviso que começa depois disso passa.
 
 Prefira quantificador com teto (`[\s\S]{0,200}?`) a `.*`. Regex podre que chegou ao banco por outro
@@ -154,5 +157,5 @@ projeto sai do `cwd` do payload). Em `~/.claude/settings.json`:
 
 Comece avisando. Bloquear só depois de olhar o `top` e confiar que os seus `em_vez_de` não têm
 falso positivo. Em qualquer falha (stdin torto, erratum não instalado, banco inacessível, mais de 5
-segundos) o hook sai 0 em silêncio: ele nunca trava o Bash do agente. Se o comando `erratum` não
+segundos, payload acima de 1 MiB) o hook sai 0 em silêncio: ele nunca trava o Bash do agente. Se o comando `erratum` não
 está no `PATH` do hook, aponte o interpretador que tem o pacote em `ERRATUM_PYTHON`.
