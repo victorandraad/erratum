@@ -23,12 +23,12 @@ STUB_CANONICO = """<?php
 
 namespace App\\Services\\Relatorio;
 
-use App\\Models\\Dashboard;
+use App\\Models\\Loja;
 
 // ponytail: a coleta diaria do Acme ainda nao existe; devolve vazio ate existir.
-class AcmeRelatorioDiarioProvider implements RelatorioDiarioProvider
+class AcmeCatalogoProvider implements CatalogoProvider
 {
-    public function dailyRows(Dashboard $dashboard, array $params): array
+    public function listarItens(Loja $loja, array $params): array
     {
         return [];
     }
@@ -36,23 +36,23 @@ class AcmeRelatorioDiarioProvider implements RelatorioDiarioProvider
 """
 
 # Null Object deliberado: o nome ANUNCIA que o vazio e a resposta certa.
-NULL_OBJECT = STUB_CANONICO.replace("AcmeRelatorioDiarioProvider", "NullRelatorioDiarioProvider")
+NULL_OBJECT = STUB_CANONICO.replace("AcmeCatalogoProvider", "NullCatalogoProvider")
 
 # Fake de teste: mesmo corpo, mora em tests/.
-FAKE_DE_TESTE = STUB_CANONICO.replace("AcmeRelatorioDiarioProvider", "FakeRelatorioDiarioProvider")
+FAKE_DE_TESTE = STUB_CANONICO.replace("AcmeCatalogoProvider", "FakeCatalogoProvider")
 
 # Implementacao de verdade: consulta a fonte, com early return de guarda.
 REAL = """<?php
 
-class AcmeRelatorioDiarioProvider implements RelatorioDiarioProvider
+class AcmeCatalogoProvider implements CatalogoProvider
 {
-    public function dailyRows(Dashboard $dashboard, array $params): array
+    public function listarItens(Loja $loja, array $params): array
     {
-        if (! $dashboard->account_id) {
+        if (! $loja->filial_id) {
             return [];
         }
 
-        return $this->insights->daily($dashboard->account_id, $params);
+        return $this->estoque->itens($loja->filial_id, $params);
     }
 }
 """
@@ -107,13 +107,13 @@ class RelatorioFeature implements Feature
 }
 """
 
-PY_STUB = '''from .contracts import RelatorioDiarioProvider
+PY_STUB = '''from .contracts import CatalogoProvider
 
 
-class AcmeRelatorioDiarioProvider(RelatorioDiarioProvider):
+class AcmeCatalogoProvider(CatalogoProvider):
     """Serie diaria do Acme."""
 
-    def daily_rows(self, dashboard, params):
+    def listar_itens(self, loja, params):
         # a coleta ainda nao existe
         return []
 '''
@@ -121,13 +121,13 @@ class AcmeRelatorioDiarioProvider(RelatorioDiarioProvider):
 PY_PROTOCOL = '''from typing import Protocol
 
 
-class RelatorioDiarioProvider(Protocol):
-    def daily_rows(self, dashboard, params) -> list:
+class CatalogoProvider(Protocol):
+    def listar_itens(self, loja, params) -> list:
         return []
 '''
 
-TS_STUB = """export class AcmeRelatorioDiarioProvider implements RelatorioDiarioProvider {
-  dailyRows(dashboard: Dashboard, params: Params): Row[] {
+TS_STUB = """export class AcmeCatalogoProvider implements CatalogoProvider {
+  listarItens(loja: Loja, params: Params): Row[] {
     return [];
   }
 }
@@ -153,34 +153,34 @@ STUB_COM_CONSTRUTOR = """<?php
 
 namespace App\\Services\\Relatorio;
 
-class AcmeRelatorioDiarioProvider implements RelatorioDiarioProvider
+class AcmeCatalogoProvider implements CatalogoProvider
 {
-    public function __construct(private readonly InsightsClient $insights)
+    public function __construct(private readonly InsightsClient $estoque)
     {
-        $this->insights = $insights;
+        $this->estoque = $estoque;
     }
 
-    public function dailyRows(Dashboard $dashboard, array $params): array
+    public function listarItens(Loja $loja, array $params): array
     {
         return [];
     }
 }
 """
 
-PY_STUB_COM_INIT = '''class AcmeRelatorioDiarioProvider(RelatorioDiarioProvider):
-    def __init__(self, insights):
-        self.insights = insights
+PY_STUB_COM_INIT = '''class AcmeCatalogoProvider(CatalogoProvider):
+    def __init__(self, estoque):
+        self.estoque = estoque
 
-    def daily_rows(self, dashboard, params):
+    def listar_itens(self, loja, params):
         return []
 '''
 
-TS_STUB_COM_CONSTRUCTOR = """export class AcmeRelatorioDiarioProvider implements RelatorioDiarioProvider {
-  constructor(private readonly insights: InsightsClient) {
-    this.insights = insights;
+TS_STUB_COM_CONSTRUCTOR = """export class AcmeCatalogoProvider implements CatalogoProvider {
+  constructor(private readonly estoque: InsightsClient) {
+    this.estoque = estoque;
   }
 
-  dailyRows(dashboard: Dashboard, params: Params): Row[] {
+  listarItens(loja: Loja, params: Params): Row[] {
     return [];
   }
 }
@@ -192,8 +192,8 @@ def _com_corpo(corpo):
 
 
 # ── BAIXA 4: contrato totalmente qualificado ─────────────────────────────────
-STUB_FQN = STUB_CANONICO.replace("implements RelatorioDiarioProvider",
-                                 "implements \\App\\Contracts\\RelatorioDiarioProvider")
+STUB_FQN = STUB_CANONICO.replace("implements CatalogoProvider",
+                                 "implements \\App\\Contracts\\CatalogoProvider")
 
 
 def monta(files, *, novos=None, outra_impl=False, impl_paths=None):
@@ -231,35 +231,35 @@ def roda(files, settings=None, **kw):
 
 class AcusaOCasoReal(unittest.TestCase):
     def test_provider_que_so_devolve_vazio(self):
-        g = roda({"app/Services/Relatorio/AcmeRelatorioDiarioProvider.php": STUB_CANONICO})
+        g = roda({"app/Services/Relatorio/AcmeCatalogoProvider.php": STUB_CANONICO})
         self.assertTrue(g.rodou)
         self.assertTrue(g.reprovou, "o caso canonico tem que ser acusado")
         # mensagem util: arquivo, classe, metodo e a pergunta
-        self.assertIn("AcmeRelatorioDiarioProvider.php", g.detalhe)
-        self.assertIn("dailyRows", g.detalhe)
-        self.assertIn("RelatorioDiarioProvider", g.detalhe)
+        self.assertIn("AcmeCatalogoProvider.php", g.detalhe)
+        self.assertIn("listarItens", g.detalhe)
+        self.assertIn("CatalogoProvider", g.detalhe)
 
     def test_python(self):
         g = roda({"src/relatorio/acme.py": PY_STUB})
         self.assertTrue(g.reprovou)
-        self.assertIn("daily_rows", g.detalhe)
+        self.assertIn("listar_itens", g.detalhe)
 
     def test_typescript(self):
         g = roda({"resources/js/relatorio/provider.ts": TS_STUB})
         self.assertTrue(g.reprovou)
-        self.assertIn("dailyRows", g.detalhe)
+        self.assertIn("listarItens", g.detalhe)
 
 
 class NaoAcusaOsFalsosPositivos(unittest.TestCase):
     def test_null_object_pelo_nome(self):
-        self.assertFalse(roda({"app/Relatorio/NullRelatorioDiarioProvider.php": NULL_OBJECT}).reprovou)
+        self.assertFalse(roda({"app/Relatorio/NullCatalogoProvider.php": NULL_OBJECT}).reprovou)
 
     def test_contrato_que_ja_tem_implementacao_concreta(self):
-        g = roda({"app/Relatorio/AcmeRelatorioDiarioProvider.php": STUB_CANONICO}, outra_impl=True)
+        g = roda({"app/Relatorio/AcmeCatalogoProvider.php": STUB_CANONICO}, outra_impl=True)
         self.assertFalse(g.reprovou, "se o neutro nasce ao lado de uma impl real, e Null Object")
 
     def test_fake_dentro_de_tests(self):
-        self.assertFalse(roda({"tests/Fakes/FakeRelatorioDiarioProvider.php": FAKE_DE_TESTE}).reprovou)
+        self.assertFalse(roda({"tests/Fakes/FakeCatalogoProvider.php": FAKE_DE_TESTE}).reprovou)
 
     def test_factory_e_vendor(self):
         g = roda({"database/factories/RelatorioFactory.php": STUB_CANONICO,
@@ -267,7 +267,7 @@ class NaoAcusaOsFalsosPositivos(unittest.TestCase):
         self.assertFalse(g.reprovou)
 
     def test_implementacao_real_com_early_return_de_guarda(self):
-        self.assertFalse(roda({"app/Relatorio/AcmeRelatorioDiarioProvider.php": REAL}).reprovou)
+        self.assertFalse(roda({"app/Relatorio/AcmeCatalogoProvider.php": REAL}).reprovou)
 
     def test_classe_parcial_isp(self):
         self.assertFalse(roda({"app/Channels/SmsChannel.php": PARCIAL}).reprovou)
@@ -282,7 +282,7 @@ class NaoAcusaOsFalsosPositivos(unittest.TestCase):
         self.assertFalse(roda({"app/Features/RelatorioFeature.php": FEATURE_FLAG}).reprovou)
 
     def test_arquivo_que_ja_existia_nao_e_implementacao_nova(self):
-        g = roda({"app/Relatorio/AcmeRelatorioDiarioProvider.php": STUB_CANONICO}, novos=[])
+        g = roda({"app/Relatorio/AcmeCatalogoProvider.php": STUB_CANONICO}, novos=[])
         self.assertFalse(g.reprovou)
 
     def test_python_protocol_e_abstract(self):
@@ -294,22 +294,22 @@ class NaoAcusaOsFalsosPositivos(unittest.TestCase):
 
 class GuardaDoContratoIgnoraTeste(unittest.TestCase):
     """ALTA 1: fake/mock em tests/ NAO conta como implementacao concreta na base. Foi o que
-    silenciaria o portao quando o unico `implements RelatorioDiarioProvider` da base mora em tests/."""
+    silenciaria o portao quando o unico `implements CatalogoProvider` da base mora em tests/."""
 
     def test_so_fake_em_tests_ainda_acusa(self):
-        g = roda({"app/Services/Score/AcmeRelatorioDiarioProvider.php": STUB_CANONICO},
+        g = roda({"app/Services/Score/AcmeCatalogoProvider.php": STUB_CANONICO},
                  impl_paths=["tests/Feature/Score/RelatorioEndpointTest.php",
                              "tests/Browser/RelatorioTelaTest.php"])
         self.assertTrue(g.reprovou, "impl so em teste nao e impl: o portao tem que acusar")
 
     def test_stub_fora_de_tests_mas_com_nome_de_double_tambem_nao_conta(self):
-        g = roda({"app/Relatorio/AcmeRelatorioDiarioProvider.php": STUB_CANONICO},
-                 impl_paths=["app/Support/FakeRelatorioDiarioProvider.php"])
+        g = roda({"app/Relatorio/AcmeCatalogoProvider.php": STUB_CANONICO},
+                 impl_paths=["app/Support/FakeCatalogoProvider.php"])
         self.assertTrue(g.reprovou)
 
     def test_impl_de_producao_de_verdade_continua_calando(self):
-        g = roda({"app/Relatorio/AcmeRelatorioDiarioProvider.php": STUB_CANONICO},
-                 impl_paths=["tests/Feature/X.php", "app/Relatorio/OutroRelatorioDiarioProvider.php"])
+        g = roda({"app/Relatorio/AcmeCatalogoProvider.php": STUB_CANONICO},
+                 impl_paths=["tests/Feature/X.php", "app/Relatorio/OutroCatalogoProvider.php"])
         self.assertFalse(g.reprovou)
 
     def test_python_tambem_tem_a_guarda(self):
@@ -326,9 +326,9 @@ class ConstrutorNaoEMetodoDeContrato(unittest.TestCase):
     metodo nao-neutro deixava a classe inteira escapar."""
 
     def test_php_com_construct(self):
-        g = roda({"app/Relatorio/AcmeRelatorioDiarioProvider.php": STUB_COM_CONSTRUTOR})
+        g = roda({"app/Relatorio/AcmeCatalogoProvider.php": STUB_COM_CONSTRUTOR})
         self.assertTrue(g.reprovou)
-        self.assertIn("dailyRows", g.detalhe)
+        self.assertIn("listarItens", g.detalhe)
         self.assertNotIn("__construct", g.detalhe)
 
     def test_python_com_init(self):
@@ -362,11 +362,11 @@ class GrafiasDeColecaoVazia(unittest.TestCase):
                       "Collection::make()", "new \\Illuminate\\Support\\Collection()",
                       "[]", "array()", "null", "0", "false", "''"]:
             with self.subTest(corpo=corpo):
-                g = roda({"app/Relatorio/AcmeRelatorioDiarioProvider.php": _com_corpo(corpo)})
+                g = roda({"app/Relatorio/AcmeCatalogoProvider.php": _com_corpo(corpo)})
                 self.assertTrue(g.reprovou, f"{corpo} e constante neutra")
 
     def test_nao_confunde_colecao_com_dado(self):
-        for corpo in ["collect($this->insights->daily($dashboard))", "$this->rows",
+        for corpo in ["collect($this->estoque->itens($loja))", "$this->rows",
                       "Collection::make($rows)", "new Collection($rows)"]:
             with self.subTest(corpo=corpo):
                 self.assertFalse(roda({"app/Relatorio/P.php": _com_corpo(corpo)}).reprovou)
@@ -376,9 +376,9 @@ class NomeDoContratoQualificado(unittest.TestCase):
     """BAIXA 4: `implements \\App\\Contracts\\X` nomeava o contrato como "App"."""
 
     def test_usa_o_ultimo_segmento(self):
-        g = roda({"app/Relatorio/AcmeRelatorioDiarioProvider.php": STUB_FQN})
+        g = roda({"app/Relatorio/AcmeCatalogoProvider.php": STUB_FQN})
         self.assertTrue(g.reprovou)
-        self.assertIn("`RelatorioDiarioProvider`", g.detalhe)
+        self.assertIn("`CatalogoProvider`", g.detalhe)
         self.assertNotIn("`App`", g.detalhe)
 
 
@@ -388,12 +388,12 @@ class NomeDoContratoQualificado(unittest.TestCase):
 # mas cego pro que um dev escreve naturalmente (log antes do return, vazio guardado em variavel,
 # guarda de config). O discriminador novo e o PARAMETRO IGNORADO: o stub recebe exatamente o que
 # descreve o que buscar e nunca toca em nada disso; quem faz trabalho de verdade usa o que recebeu.
-def _php(corpo, assinatura="dailyRows(Dashboard $dashboard, array $params): array"):
+def _php(corpo, assinatura="listarItens(Loja $loja, array $params): array"):
     return ("""<?php
 
 namespace App\\Services\\Relatorio;
 
-class AcmeRelatorioDiarioProvider implements RelatorioDiarioProvider
+class AcmeCatalogoProvider implements CatalogoProvider
 {
     public function %s
     {
@@ -408,53 +408,53 @@ class CriterioParametroIgnorado(unittest.TestCase):
     nenhum dos seus parametros."""
 
     def test_log_antes_do_return(self):
-        g = roda({"app/Services/Relatorio/AcmeRelatorioDiarioProvider.php":
+        g = roda({"app/Services/Relatorio/AcmeCatalogoProvider.php":
                   _php("        Log::info('sem coletor para o Acme');\n\n        return [];")})
         self.assertTrue(g.reprovou)
-        self.assertIn("dailyRows", g.detalhe)
+        self.assertIn("listarItens", g.detalhe)
 
     def test_vazio_guardado_em_variavel(self):
-        g = roda({"app/Services/Relatorio/AcmeRelatorioDiarioProvider.php":
+        g = roda({"app/Services/Relatorio/AcmeCatalogoProvider.php":
                   _php("        $rows = [];\n\n        return $rows;")})
         self.assertTrue(g.reprovou)
 
     def test_guarda_de_config_com_dois_returns_neutros(self):
-        g = roda({"app/Services/Relatorio/AcmeRelatorioDiarioProvider.php":
+        g = roda({"app/Services/Relatorio/AcmeCatalogoProvider.php":
                   _php("        if (! config('relatorio.acme')) {\n"
                        "            return [];\n        }\n\n        return [];")})
         self.assertTrue(g.reprovou)
 
     def test_caso_real_com_e_sem_construtor(self):
-        self.assertTrue(roda({"app/Relatorio/AcmeRelatorioDiarioProvider.php": STUB_CANONICO}).reprovou)
-        self.assertTrue(roda({"app/Relatorio/AcmeRelatorioDiarioProvider.php":
+        self.assertTrue(roda({"app/Relatorio/AcmeCatalogoProvider.php": STUB_CANONICO}).reprovou)
+        self.assertTrue(roda({"app/Relatorio/AcmeCatalogoProvider.php":
                               STUB_COM_CONSTRUTOR}).reprovou)
 
     def test_mensagem_diz_qual_parametro_foi_ignorado(self):
-        g = roda({"app/Services/Relatorio/AcmeRelatorioDiarioProvider.php":
+        g = roda({"app/Services/Relatorio/AcmeCatalogoProvider.php":
                   _php("        Log::info('sem coletor');\n\n        return [];")})
-        self.assertIn("$dashboard", g.detalhe)
+        self.assertIn("$loja", g.detalhe)
         self.assertIn("$params", g.detalhe)
 
     def test_this_nao_e_parametro(self):
         """Metodo que so usa `$this` e ignora os argumentos continua acusado: ele ignorou o que
         descrevia a busca."""
-        g = roda({"app/Services/Relatorio/AcmeRelatorioDiarioProvider.php":
+        g = roda({"app/Services/Relatorio/AcmeCatalogoProvider.php":
                   _php("        $this->logger->warning('sem coletor');\n\n        return [];")})
         self.assertTrue(g.reprovou)
 
     def test_self_nao_conta_como_parametro_em_python(self):
-        src = '''class AcmeRelatorioDiarioProvider(RelatorioDiarioProvider):
-    def daily_rows(self, dashboard, params):
+        src = '''class AcmeCatalogoProvider(CatalogoProvider):
+    def listar_itens(self, loja, params):
         self.logger.warning("sem coletor")
         return []
 '''
         g = roda({"src/relatorio/acme.py": src})
         self.assertTrue(g.reprovou)
-        self.assertIn("dashboard", g.detalhe)
+        self.assertIn("loja", g.detalhe)
 
     def test_typescript(self):
-        src = """export class AcmeRelatorioDiarioProvider implements RelatorioDiarioProvider {
-  dailyRows(dashboard: Dashboard, params: Params): Row[] {
+        src = """export class AcmeCatalogoProvider implements CatalogoProvider {
+  listarItens(loja: Loja, params: Params): Row[] {
     console.warn('sem coletor');
     return [];
   }
@@ -462,20 +462,20 @@ class CriterioParametroIgnorado(unittest.TestCase):
 """
         g = roda({"resources/js/relatorio/provider.ts": src})
         self.assertTrue(g.reprovou)
-        self.assertIn("dashboard", g.detalhe)
+        self.assertIn("loja", g.detalhe)
 
     def test_default_variadico_e_por_referencia_contam_igual(self):
-        g = roda({"app/Services/Relatorio/AcmeRelatorioDiarioProvider.php":
+        g = roda({"app/Services/Relatorio/AcmeCatalogoProvider.php":
                   _php("        Log::info('sem coletor');\n\n        return [];",
-                       "dailyRows(array &$out, array $params = [], int ...$ids): array")})
+                       "listarItens(array &$out, array $params = [], int ...$ids): array")})
         self.assertTrue(g.reprovou)
         self.assertIn("$out", g.detalhe)
         self.assertIn("$ids", g.detalhe)
 
     def test_nome_curto_nao_casa_dentro_de_outra_palavra(self):
-        g = roda({"app/Services/Relatorio/AcmeRelatorioDiarioProvider.php":
+        g = roda({"app/Services/Relatorio/AcmeCatalogoProvider.php":
                   _php("        $identificador = $this->ids[0];\n\n        return [];",
-                       "dailyRows(int $id): array")})
+                       "listarItens(int $id): array")})
         self.assertTrue(g.reprovou, "`$identificador` e `$this->ids` nao sao uso de `$id`")
 
 
@@ -523,8 +523,8 @@ class ContaRepositorio implements Persistivel
         self.assertFalse(roda({"app/Contas/ContaRepositorio.php": src}).reprovou)
 
     def test_usa_so_um_dos_parametros(self):
-        g = roda({"app/Services/Relatorio/AcmeRelatorioDiarioProvider.php":
-                  _php("        $this->cache->put($dashboard->id, []);\n\n        return [];")})
+        g = roda({"app/Services/Relatorio/AcmeCatalogoProvider.php":
+                  _php("        $this->cache->put($loja->id, []);\n\n        return [];")})
         self.assertFalse(g.reprovou, "usou um parametro: nao ignorou o que descreve a busca")
 
     def test_corpo_vazio_com_parametro_continua_fora(self):
@@ -540,13 +540,13 @@ class ContaObserver implements Observador
         self.assertFalse(roda({"app/Contas/ContaObserver.php": src}).reprovou)
 
     def test_variavel_que_e_preenchida_nao_e_constante_neutra(self):
-        g = roda({"app/Services/Relatorio/AcmeRelatorioDiarioProvider.php":
+        g = roda({"app/Services/Relatorio/AcmeCatalogoProvider.php":
                   _php("        $rows = [];\n        foreach ($this->cliente->linhas() as $l) {\n"
                        "            $rows[] = $l;\n        }\n\n        return $rows;")})
         self.assertFalse(g.reprovou)
 
     def test_implementacao_real_e_classe_parcial_seguem_limpas(self):
-        self.assertFalse(roda({"app/Relatorio/AcmeRelatorioDiarioProvider.php": REAL}).reprovou)
+        self.assertFalse(roda({"app/Relatorio/AcmeCatalogoProvider.php": REAL}).reprovou)
         self.assertFalse(roda({"app/Channels/SmsChannel.php": PARCIAL}).reprovou)
 
 

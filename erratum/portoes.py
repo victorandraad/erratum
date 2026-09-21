@@ -311,7 +311,7 @@ _DEF_PY_RX = re.compile(r"^(?P<ind>[ \t]+)def\s+(?P<nome>\w+)\s*\((?P<args>[^()]
 # Critério do parâmetro ignorado: exigir que o corpo inteiro seja um return tem ruído zero,
 # mas cego pro que um dev escreve naturalmente (log antes do return, vazio guardado em variável,
 # guarda de config). O discriminador é o PARÂMETRO IGNORADO: o stub recebe exatamente o que descreve
-# o que buscar (`dailyRows(Dashboard $dashboard, array $params)`) e nunca toca em nada disso; quem
+# o que buscar (`listarItens(Loja $loja, array $params)`) e nunca toca em nada disso; quem
 # faz trabalho de verdade usa o que recebeu. ("não chama colaborador" foi descartado: deixaria passar
 # `Log::info(...); return [];` e acusaria `$this->repo->save($x); return [];`, que faz trabalho.)
 _PY_NAO_PARAM = {"self", "cls"}
@@ -328,7 +328,7 @@ def _stub_sem_tipos(args):
 
 
 def _stub_params(args, py, php):
-    """Nomes dos parâmetros COMO O CORPO OS MENCIONARIA (`$dashboard` em PHP, `dashboard` nas
+    """Nomes dos parâmetros COMO O CORPO OS MENCIONARIA (`$loja` em PHP, `loja` nas
     outras). `$this`/`self`/`cls` não são parâmetro: quem só usa o próprio objeto continua tendo
     ignorado o que descrevia a busca. Default, variádico e por referência contam igual."""
     args = _stub_sem_tipos(args)
