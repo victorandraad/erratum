@@ -24,6 +24,13 @@ class TestBranchViraMarcador(unittest.TestCase):
         self.assertEqual(sig("checkout 'x' falhou; base \"y\" sumiu"),
                          "checkout '<branch>' falhou; base '<branch>' sumiu")
 
+    def test_par_que_divergiu_entre_aspas(self):
+        self.assertEqual(sig("'develop' divergiu e conflita com 'main'"),
+                         sig("'principal' divergiu e conflita com 'develop'"))
+        self.assertEqual(sig("'a' diverged and conflicts with 'b'"),
+                         "'<branch>' diverged and conflicts with '<branch>'")
+        self.assertNotEqual(sig("'develop' divergiu"), sig("'develop' sumiu"))
+
     def test_destino_do_merge_sem_aspas(self):
         a = sig("conflito ao mergear feat/tela-1 em develop; resolva à mão")
         b = sig("conflito ao mergear feat/outra no principal local; resolva à mão")

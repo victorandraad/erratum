@@ -25,6 +25,10 @@ class Assinatura:
     _BRANCH_ASPAS = re.compile(
         r"\b((?:branch|merge|base|rebase|checkout|origin)\s+)['\"]([\w./-]+)['\"]"
     )
+    _BRANCH_DIVERGIU = re.compile(
+        r"['\"][\w./-]+['\"](\s+(?:divergiu|diverged)\b)"
+        r"|(\b(?:conflita com|conflicts with)\s+)['\"][\w./-]+['\"]"
+    )
     _BRANCH_LIGADO = re.compile(
         r"(<branch>\s+(?:em|no|na|into|onto|to|and)\s+(?:[oa]\s+)?)"
         + _TOKEN_BRANCH
@@ -93,6 +97,10 @@ class Assinatura:
     def _trocar_branch(cls, texto):
         texto = cls._PREFIXO_BRANCH.sub("<branch>", texto)
         texto = cls._BRANCH_ASPAS.sub(r"\1'<branch>'", texto)
+        texto = cls._BRANCH_DIVERGIU.sub(
+            lambda m: "'<branch>'" + m.group(1) if m.group(1) else m.group(2) + "'<branch>'",
+            texto,
+        )
         texto = cls._enquanto_mudar(cls._BRANCH_LIGADO, r"\1<branch>", texto)
         texto = cls._BETWEEN_BRANCH.sub(r"\1<branch>\2", texto)
         texto = cls._VERBO_BRANCH.sub(r"\1 <branch>", texto)
