@@ -25,11 +25,13 @@ class FakeRes:
 DIFF_PROD_TEST = "app/Money.php\ntests/Feature/MoneyTest.php\n"
 ORIG_SHA = "origsha123"
 CMDS = ["acme-test {testes}"]
+VERDE = FakeRes(rc=0, out="OK")
 
 
 def make_fake(*, runner=None, cat_file_rc=0, rec=None, diff=DIFF_PROD_TEST):
     """`sh` falso: responde por conteudo do cmd e grava tudo em `rec`. `runner` = FakeRes/excecao
-    da rodada de testes."""
+    da rodada de testes, ou lista delas (uma por rodada: com o patch, depois sem)."""
+    fila = list(runner) if isinstance(runner, list) else None
     def fake(cmd, **kw):
         if rec is not None:
             rec.append(cmd)
@@ -41,9 +43,10 @@ def make_fake(*, runner=None, cat_file_rc=0, rec=None, diff=DIFF_PROD_TEST):
             return FakeRes(rc=cat_file_rc)
         if cmd[0] == "git":
             return FakeRes(rc=0)
-        if isinstance(runner, Exception):
-            raise runner
-        return runner if runner is not None else FakeRes(rc=0)
+        atual = fila.pop(0) if fila is not None else runner
+        if isinstance(atual, Exception):
+            raise atual
+        return atual if atual is not None else FakeRes(rc=0)
     return fake
 
 
@@ -56,7 +59,7 @@ def roda(fake, settings=None, **kw):
 class ComShFalso(unittest.TestCase):
     def test_fix_real_aprova_e_restaura(self):
         rec = []
-        r = roda(make_fake(runner=FakeRes(rc=1, out="FAIL"), rec=rec))
+        r = roda(make_fake(runner=[VERDE, FakeRes(rc=1, out="FAIL")], rec=rec))
         self.assertEqual(portoes.APROVOU, r.veredito)
         self.assertTrue(any(c[:3] == ["git", "checkout", ORIG_SHA] for c in rec))
         self.assertIn(["acme-test", "tests/Feature/MoneyTest.php"], rec)
@@ -66,14 +69,24 @@ class ComShFalso(unittest.TestCase):
         self.assertTrue(r.reprovou)
         self.assertIn("continuam verdes", r.motivo)
 
+    def test_teste_que_ja_falha_com_o_patch_reprova_como_instrumento_morto(self):
+        rec = []
+        r = roda(make_fake(runner=[FakeRes(rc=1, out="FAIL: test_soma"), FakeRes(rc=1)], rec=rec))
+        self.assertTrue(r.reprovou)
+        self.assertIn("instrumento-morto", r.motivo)
+        self.assertIn("FAIL: test_soma", r.motivo)
+        self.assertEqual(1, sum(1 for c in rec if c[0] == "acme-test"), "nao roda a 2a rodada")
+        self.assertFalse(any(c[:2] in (["git", "checkout"], ["git", "rm"]) for c in rec),
+                         "nada revertido")
+
     def test_producao_nova_e_removida_em_vez_de_revertida(self):
         rec = []
-        roda(make_fake(runner=FakeRes(rc=1), cat_file_rc=1, rec=rec))
+        roda(make_fake(runner=[VERDE, FakeRes(rc=1)], cat_file_rc=1, rec=rec))
         self.assertTrue(any(c[:2] == ["git", "rm"] for c in rec))
 
     def test_restaura_em_excecao(self):
         rec = []
-        r = roda(make_fake(runner=RuntimeError("boom"), rec=rec))  # nao propaga
+        r = roda(make_fake(runner=[VERDE, RuntimeError("boom")], rec=rec))  # nao propaga
         self.assertTrue(r.pulou)
         self.assertIn("boom", r.detalhe)
         self.assertTrue(any(c[:3] == ["git", "checkout", ORIG_SHA] for c in rec))
@@ -95,7 +108,7 @@ class ComShFalso(unittest.TestCase):
         self.assertEqual(portoes.PULOU, visto[0][1])
 
     def test_repo_com_test_cmds_proprio_nao_e_mais_recusado(self):
-        r = roda(make_fake(runner=FakeRes(rc=1)), settings={"test_cmds": ["pnpm test"]})
+        r = roda(make_fake(runner=[VERDE, FakeRes(rc=1)]), settings={"test_cmds": ["pnpm test"]})
         self.assertEqual(portoes.APROVOU, r.veredito)
 
     def test_flag_desligada(self):
@@ -161,6 +174,18 @@ class ComRepoDeVerdade(unittest.TestCase):
             visto = []
             r = self._roda(wt, base, visto)
             self.assertTrue(r.reprovou, r.detalhe)
+            self.assertEqual("", git(wt, "status", "--porcelain"))
+            self.assertEqual(("fix-noop", portoes.REPROVOU), visto[0][:2])
+
+    def test_teste_quebrado_de_nascenca_reprova_como_instrumento_morto(self):
+        quebrado = TESTE_QUE_PROVA.replace("assertEqual(5,", "assertEqual(6,")
+        with tempfile.TemporaryDirectory() as tmp:
+            wt, base = self._repo(tmp, CALC_CERTO, quebrado)
+            visto = []
+            r = self._roda(wt, base, visto)
+            self.assertTrue(r.reprovou, r.detalhe)
+            self.assertIn("instrumento-morto", r.motivo)
+            self.assertEqual(CALC_CERTO, (wt / "acme" / "calc.py").read_text())
             self.assertEqual("", git(wt, "status", "--porcelain"))
             self.assertEqual(("fix-noop", portoes.REPROVOU), visto[0][:2])
 
