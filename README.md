@@ -1,5 +1,7 @@
 # erratum
 
+![16,055 real error occurrences from the ledger fall into 1,303 buildings, one per signature](docs/img/erratum.webp)
+
 Not a memory store. A gate that **proves the fix actually fixes**, and a local ledger so the same
 error is **not solved twice**. No model in the middle: Python 3.9+, stdlib, one SQLite file.
 
