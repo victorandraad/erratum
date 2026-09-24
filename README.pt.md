@@ -2,6 +2,8 @@
 
 # erratum
 
+![16.055 ocorrências reais de erro do ledger caem em 1.303 prédios, um por assinatura](docs/img/erratum.webp)
+
 Não é memória. É um portão que **prova que a correção conserta**, e um caderno local para o mesmo
 erro **não ser resolvido duas vezes**. Sem modelo no meio: Python 3.9+, stdlib, um SQLite.
 
