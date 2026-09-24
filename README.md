@@ -57,6 +57,25 @@ erratum gate stub-neutro,fix-noop --base main --test-cmd "python3 -B -m unittest
 Signatures normalize volatile bits (paths become `/PATH`, numbers become `N`, branch names become
 `<branch>`), so one fix covers past and future occurrences.
 
+`erratum compact` only changes how history is stored: rows with the same signature collapse into
+one per task (different tasks never merge), repetitions are summed and the oldest `ts` is kept.
+`top` reports the same numbers before and after, FTS keeps one entry per surviving row, and fixes
+stay findable. Run it with `--dry-run` first.
+
+## Gates (`gate`)
+
+Model-free checks on the diff between `--base` and `HEAD`:
+
+| Gate | Fails when |
+|---|---|
+| `fix-noop` | the diff's tests pass even with the production code reverted: the fix does not fix, or the test always passes |
+| `fix-noop` (`instrumento-morto`) | the diff's tests already fail with the fix applied: a test broken from birth proves nothing |
+| `stub-neutro` | a new class meets the contract by returning a neutral constant (`[]`, `None`, `0`) from every method |
+| `em-dash` | replacing a prose em dash with a comma breaks the tests (normally it fixes, commits and passes) |
+
+Without `--test-cmd`, `fix-noop` skips instead of guessing. Real cases, with the diff and the gate's
+actual output: [docs/casos.md](docs/casos.md) (Portuguese).
+
 Portuguese command names still work. English aliases: `compact` (`compactar`), `outcome`
 (`desfecho`), `effect` (`efeito`).
 

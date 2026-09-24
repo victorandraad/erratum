@@ -81,7 +81,8 @@ $ echo $?
 O teste do commit era `assertTrue(callable(calc.soma))`: passa com o defeito e com o conserto. São
 três portões, todos determinísticos (git, regex e o seu runner): `fix-noop`, `stub-neutro` (classe
 nova que cumpre o contrato devolvendo `[]` em tudo) e `em-dash`. Rodam no pre-commit e no CI:
-[docs/portoes-no-commit.md](docs/portoes-no-commit.md).
+[docs/portoes-no-commit.md](docs/portoes-no-commit.md). Casos reais, com diff e a saída do
+portão: [docs/casos.md](docs/casos.md).
 
 ## E não resolva duas vezes
 
@@ -91,6 +92,9 @@ com confiança, ele diz isso em vez de chutar. Python puro (stdlib), um SQLite.
 
 A mesma falha reemitida no mesmo card não vira mil linhas: a linha ganha um contador. Histórico
 já inflado (import antigo, esteira que polia): `erratum compactar` (`--dry-run` primeiro).
+O `compactar` só muda a forma de guardar: colapsa as linhas de mesma assinatura em uma por task
+(nunca junta tasks diferentes), soma as repetições e fica com o `ts` mais antigo. O `top` reporta o
+mesmo antes e depois, o FTS fica com uma entrada por linha viva e a correção continua achável.
 
 ## E não improvise o que já tem comando
 
