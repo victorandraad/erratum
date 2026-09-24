@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -69,6 +70,56 @@ def _checar(comando, dado):
         return None
 
 
+_SEPARADORES = {";", "&&", "||", "|", "&"}
+# flags curtas do git commit que consomem valor: o resto do grupo (ou o próximo token) é valor
+_COM_VALOR = set("mFCct")
+_COM_VALOR_LONGO = {"--message", "--file", "--reuse-message", "--reedit-message", "--template",
+                    "--author", "--date", "--fixup", "--squash", "--cleanup", "--trailer"}
+
+
+def _pula_verificacao(comando):
+    """True se algum `git ... commit` do comando leva --no-verify ou -n (inclusive agrupado)."""
+    try:
+        lexer = shlex.shlex(comando, posix=True, punctuation_chars=";&|")
+        lexer.whitespace_split = True
+        tokens = list(lexer)
+    except ValueError:
+        return False
+    subs, atual = [], []
+    for t in tokens:
+        if t in _SEPARADORES:
+            subs.append(atual)
+            atual = []
+        else:
+            atual.append(t)
+    subs.append(atual)
+    for sub in subs:
+        if not sub or os.path.basename(sub[0]) != "git":
+            continue
+        i = 1
+        while i < len(sub) and sub[i].startswith("-"):
+            i += 2 if sub[i] in ("-C", "-c") else 1  # opções globais do git
+        if i >= len(sub) or sub[i] != "commit":
+            continue
+        args = sub[i + 1:]
+        pula_valor = False
+        for a in args:
+            if pula_valor:
+                pula_valor = False
+            elif a == "--no-verify":
+                return True
+            elif a.startswith("--"):
+                pula_valor = a in _COM_VALOR_LONGO
+            elif a.startswith("-") and len(a) > 1:
+                for i, letra in enumerate(a[1:]):
+                    if letra == "n":
+                        return True
+                    if letra in _COM_VALOR:
+                        pula_valor = i == len(a) - 2  # valor no próximo token
+                        break
+    return False
+
+
 def _aviso_de(dado):
     nome = dado.get("receita") or ""
     comando = dado.get("comando") or ""
@@ -85,6 +136,10 @@ def main():
     comando = _comando(dado)
     if comando is None:
         _sair(0)
+    if _pula_verificacao(comando):
+        sys.stderr.write("git commit --no-verify (ou -n) barrado: rode o commit sem --no-verify "
+                         "e conserte o portão que reprovou.\n")
+        _sair(2)
     proc = _checar(comando, dado)
     if proc is None:
         _sair(0)

@@ -20,8 +20,9 @@ guarda de worktree limpo não se aplica, porque nesse modo nenhum portão escrev
   por cima de um worktree com edição pendente. `gate fix-noop --staged` é uso errado (exit 2).
 
 Detalhes: o hook usa `python3`, ou o interpretador de `ERRATUM_PYTHON`; se o `erratum` não estiver
-importável ele avisa no stderr e **não bloqueia** o commit. `git commit --no-verify` pula o hook,
-como qualquer hook do git.
+importável ele avisa no stderr e **não bloqueia** o commit. Para agente, `git commit --no-verify`
+(ou `-n`) é barrado pelo hook PreToolUse `hooks/pretooluse-check-cmd.py` (exit 2 sempre, sem
+depender de `ERRATUM_HOOK_BLOQUEIA`): rode sem ele e conserte o portão que reprovou.
 
 ## CI (o diff do pull request)
 
