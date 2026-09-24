@@ -165,5 +165,65 @@ class TestCliReindex(CasoComLedger):
         self.assertEqual(aviso, "")
 
 
+class TestDivisaoComCorrecao(CasoComLedger):
+    """Assinatura antiga COM correção que a regra nova divide em 2+: a minoria perderia a
+    correção calada (most_common). Simular lista; o real aborta, a menos que forçado."""
+
+    def _semear(self):
+        for i, codigo in enumerate(("TS2322", "TS2322", "TS2339")):
+            self.ledger.registrar_erro(
+                "error %s: tipo errado" % codigo, "acme",
+                contexto={"task": "t%d" % i}, com_pistas=False)
+        with self.banco.transacao() as con:
+            con.execute("UPDATE errors SET signature = 'velha'")
+            con.execute(
+                "INSERT INTO fixes(ts, project, signature, note, ref, test, source) "
+                "VALUES ('2026-01-01', 'acme', 'velha', 'tipar o campo', '', '', 'manual')")
+            con.execute("DELETE FROM meta")
+
+    def test_simular_lista_a_divisao(self):
+        self._semear()
+        r = Reindexador(self.banco).rodar(simular=True)
+        self.assertEqual(len(r.divisoes), 1)
+        antiga, novas = r.divisoes[0]
+        self.assertEqual(antiga, "velha")
+        self.assertEqual(len(novas), 2)
+
+    def test_real_aborta_sem_escrever(self):
+        from erratum.reindex import DivisaoComCorrecao
+        self._semear()
+        with self.assertRaises(DivisaoComCorrecao) as ctx:
+            Reindexador(self.banco).rodar()
+        self.assertEqual(len(ctx.exception.divisoes), 1)
+        sigs = self.banco.consultar("SELECT DISTINCT signature FROM errors")
+        self.assertEqual([l["signature"] for l in sigs], ["velha"])
+
+    def test_forcar_segue(self):
+        self._semear()
+        r = Reindexador(self.banco).rodar(forcar=True)
+        self.assertEqual(len(r.divisoes), 1)
+        self.assertEqual(len(self.banco.consultar("SELECT DISTINCT signature FROM errors")), 2)
+
+    def test_sem_correcao_nao_e_divisao(self):
+        self._semear()
+        with self.banco.transacao() as con:
+            con.execute("DELETE FROM fixes")
+        self.assertEqual(Reindexador(self.banco).rodar().divisoes, ())
+
+    def test_cli_exit_1_lista_e_forcar_passa(self):
+        self._semear()
+        codigo, saida = self.cli("reindex", "--dry-run")
+        self.assertEqual(codigo, 0)
+        self.assertIn("velha", saida)
+        codigo, saida = self.cli("reindex")
+        self.assertEqual(codigo, 1)
+        self.assertIn("velha", saida)
+        self.assertIn("--forcar", saida)
+        self.assertEqual(len(self.banco.consultar("SELECT DISTINCT signature FROM errors")), 1)
+        codigo, _ = self.cli("reindex", "--forcar")
+        self.assertEqual(codigo, 0)
+        self.assertEqual(len(self.banco.consultar("SELECT DISTINCT signature FROM errors")), 2)
+
+
 if __name__ == "__main__":
     unittest.main()

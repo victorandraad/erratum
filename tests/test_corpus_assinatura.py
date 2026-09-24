@@ -69,10 +69,8 @@ class TestCorpusDeAssinatura(CasoComLedger):
         for a, b in self.esperado["pares"]["iguais"]:
             self.assertEqual(Assinatura(_log(a)), Assinatura(_log(b)), (a, b))
 
-    @unittest.expectedFailure
-    def test_colisoes_conhecidas_ainda_colidem(self):
-        # defeito conhecido do normalizador: quando for corrigido este teste passa e o
-        # expectedFailure acusa; mova o par para pares.distintos
+    def test_colisoes_do_pytest_agora_distintas(self):
+        # v3: o foco na linha E do pytest separa o que o corte de 120 do cabecalho juntava
         for a, b, _motivo in self.esperado["colisoes_conhecidas"]:
             self.assertNotEqual(Assinatura(_log(a)), Assinatura(_log(b)), (a, b))
 
