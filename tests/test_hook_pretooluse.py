@@ -121,6 +121,21 @@ class TesteHookPreToolUse(unittest.TestCase):
         self.assertEqual(proc.returncode, 0)
         self.assertIn("esperar-ci", proc.stdout)
 
+    def test_commit_no_verify_e_barrado_sempre(self):
+        for comando in ("git commit --no-verify -m x", "git commit -n -m x", "git commit -nm x",
+                        "git add a && git commit -am x -n", "git -C repo commit --no-verify"):
+            proc = self._rodar(self._payload(comando))  # sem ERRATUM_HOOK_BLOQUEIA
+            self.assertEqual(proc.returncode, 2, comando)
+            self.assertIn("--no-verify", proc.stderr, comando)
+            self.assertIn("portão", proc.stderr, comando)
+
+    def test_commit_sem_no_verify_passa(self):
+        for comando in ('git commit -m "x"', 'git commit -m "usa -n aqui"',
+                        "git commit -m 'pula --no-verify nunca'", "git log -n 3",
+                        "git commit --amend --no-edit"):
+            proc = self._rodar(self._payload(comando), ERRATUM_HOOK_BLOQUEIA="1")
+            self.assertEqual((proc.returncode, proc.stderr), (0, ""), comando)
+
 
 if __name__ == "__main__":
     unittest.main()
