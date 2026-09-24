@@ -21,6 +21,8 @@ import shlex
 import subprocess
 from pathlib import Path
 
+from erratum.idioma import t
+
 # Saída enumerada. Str simples (e não Enum) pra atravessar JSON/log sem conversão.
 APROVOU = "aprovou"
 REPROVOU = "reprovou"
@@ -63,6 +65,12 @@ class Resultado:
     @property
     def pulou(self):
         return self.veredito == PULOU
+
+
+def _msg_pendentes(n):
+    return t("uncommitted tracked change in the worktree (%d file(s)): commit or stash first",
+             "alteracao rastreada pendente no worktree "
+             "(%d arquivo(s)): commite ou guarde antes") % n
 
 
 def _pulou(detalhe=""):
@@ -176,12 +184,12 @@ class Portao:
     def rodar(self):
         try:
             if self.flag and not self.settings.get(self.flag, True):
-                resultado = _pulou("flag desligada no repo")
+                resultado = _pulou(t("flag disabled in this repo", "flag desligada no repo"))
             else:
                 resultado = self._julgar()
         except Exception as exc:  # noqa: BLE001: portão não pode derrubar o chamador
             self.log(f"{self.nome}: {exc}")
-            resultado = _pulou(f"exceção: {exc}")
+            resultado = _pulou(t("exception: ", "exceção: ") + str(exc))
         self._avisar(resultado)
         return resultado
 
@@ -215,26 +223,28 @@ class PortaoFixNoop(Portao):
     def _julgar(self):
         if not self.comandos_de_teste:
             self.log(f"{self.nome}: sem comando de teste configurado, pulando")
-            return _pulou("sem comando de teste configurado (test_cmds / --test-cmd)")
+            return _pulou(t("no test command configured (test_cmds / --test-cmd)",
+                             "sem comando de teste configurado (test_cmds / --test-cmd)"))
         testes, prod = self.diff.testes(), self.diff.producao()
         # Nada a provar: sem teste (não há o que falhar) OU sem produção (nada pra reverter).
         if not testes or not prod:
-            return _pulou("diff sem par produção+teste")
+            return _pulou(t("diff has no production+test pair", "diff sem par produção+teste"))
         pendentes = self.diff.pendentes()
         if pendentes:
-            return _pulou(
-                "alteracao rastreada pendente no worktree "
-                f"({len(pendentes)} arquivo(s)): commite ou guarde antes")
+            return _pulou(_msg_pendentes(len(pendentes)))
         # Baseline: teste que já falha COM o patch não prova nada (quebrado de nascença).
         base = self.diff.rodar_testes(self.comandos_de_teste, testes)
         if base.returncode != 0:
             saida = f"{base.stdout or ''}\n{base.stderr or ''}"
             cauda = " | ".join([l for l in saida.splitlines() if l.strip()][-5:])
-            return Resultado(REPROVOU, motivo="instrumento-morto: os testes do escopo já falham "
-                             f"com a correção aplicada (teste quebrado não prova nada): {cauda}")
+            return Resultado(REPROVOU, motivo=t(
+                "instrumento-morto: the scoped tests already fail with the fix applied "
+                "(a broken test proves nothing): ",
+                "instrumento-morto: os testes do escopo já falham "
+                "com a correção aplicada (teste quebrado não prova nada): ") + cauda)
         sh, wt = self.diff.sh, str(self.diff.worktree)
         orig_sha = (sh(["git", "rev-parse", "HEAD"], cwd=wt).stdout or "").strip()
-        resultado = _pulou("exceção")
+        resultado = _pulou(t("exception", "exceção"))
         try:
             for f in prod:
                 # produção NOVA (ausente em diff_ref): reverter = remover do working tree.
@@ -244,14 +254,18 @@ class PortaoFixNoop(Portao):
                     sh(["git", "rm", "-f", "--quiet", f], cwd=wt)
             passou = self.diff.rodar_testes(self.comandos_de_teste, testes).returncode == 0
             if passou:
-                resultado = Resultado(REPROVOU, motivo="Testes do escopo continuam verdes sem a "
-                                      "correção (no-op ou teste que sempre passa)")
+                resultado = Resultado(REPROVOU, motivo=t(
+                    "Scoped tests stay green without the fix (no-op or a test that always passes)",
+                    "Testes do escopo continuam verdes sem a "
+                    "correção (no-op ou teste que sempre passa)"))
             else:
-                resultado = Resultado(APROVOU, detalhe="Testes do escopo falham sem a correção "
-                                      "(regressão real capturada)")
+                resultado = Resultado(APROVOU, detalhe=t(
+                    "Scoped tests fail without the fix (real regression caught)",
+                    "Testes do escopo falham sem a correção "
+                    "(regressão real capturada)"))
         except Exception as exc:  # noqa: BLE001: portão não pode derrubar o chamador
             self.log(f"{self.nome}: {exc}")
-            resultado = _pulou(f"exceção: {exc}")
+            resultado = _pulou(t("exception: ", "exceção: ") + str(exc))
         finally:
             # restaura o commit original (recria o que foi removido: orig_sha tem o arquivo).
             for f in prod:
@@ -485,9 +499,9 @@ def _stub_classes(rel, src):
 
 def _stub_frase(nome, valor, ignorados):
     """Sem dizer QUAL parâmetro foi ignorado o Dev não entende a acusação."""
-    frase = f"`{nome}()` devolve {valor or 'neutro'}"
+    frase = t("`%s()` returns %s", "`%s()` devolve %s") % (nome, valor or t("neutral", "neutro"))
     if ignorados:
-        frase += " ignorando " + ", ".join(f"`{p}`" for p in ignorados)
+        frase += t(" ignoring ", " ignorando ") + ", ".join(f"`{p}`" for p in ignorados)
     return frase
 
 
@@ -508,7 +522,7 @@ class PortaoStubNeutro(Portao):
         for rel in self.diff.arquivos(novos_ou_modificados=True):
             achados += self._achados_do_arquivo(rel)
         if not achados:
-            return Resultado(APROVOU, detalhe="nenhum stub neutro")
+            return Resultado(APROVOU, detalhe=t("no neutral stub", "nenhum stub neutro"))
         return Resultado(REPROVOU, motivo="; ".join(achados))
 
     def _achados_do_arquivo(self, rel):
@@ -547,10 +561,11 @@ class PortaoStubNeutro(Portao):
             iface = self._contrato(contratos)
             if iface and self._ja_tem_implementacao_real(iface):
                 continue
-            achados.append(f"{rel}: `{classe}` implementa `{iface}` e "
+            achados.append(t("%s: `%s` implements `%s` and ", "%s: `%s` implementa `%s` e ")
+                           % (rel, classe, iface)
                            + ", ".join(_stub_frase(n, valor, ign)
                                        for n, _, valor, ign in neutros)
-                           + " sem consultar fonte nenhuma")
+                           + t(" without consulting any source", " sem consultar fonte nenhuma"))
         return achados
 
     @staticmethod
@@ -646,7 +661,7 @@ class PortaoEmDash(Portao):
     def _so_detectar(self):
         correcoes = self._ofensores()
         if not correcoes:
-            return Resultado(APROVOU, detalhe="nenhum travessão de prosa", corrigiu=False)
+            return Resultado(APROVOU, detalhe=t("no prose em-dash", "nenhum travessão de prosa"), corrigiu=False)
         return Resultado(
             REPROVOU,
             motivo=", ".join(correcoes),
@@ -659,18 +674,20 @@ class PortaoEmDash(Portao):
         sh, wt = self.diff.sh, str(self.diff.worktree)
         correcoes = self._ofensores()
         if not correcoes:
-            return Resultado(APROVOU, detalhe="nenhum travessão de prosa", corrigiu=False)
+            return Resultado(APROVOU, detalhe=t("no prose em-dash", "nenhum travessão de prosa"), corrigiu=False)
         pendentes = self.diff.pendentes()
         if pendentes:
             return Resultado(
                 PULOU,
-                detalhe=("alteracao rastreada pendente no worktree "
-                         f"({len(pendentes)} arquivo(s)): commite ou guarde antes"),
+                detalhe=_msg_pendentes(len(pendentes)),
                 corrigiu=False)
         testes = self.diff.testes()
         if testes and not self.comandos_de_teste:
-            return Resultado(PULOU, detalhe=f"travessão de prosa em {len(correcoes)} arquivo(s), "
-                             "mas sem comando de teste pra confirmar a troca", corrigiu=False)
+            return Resultado(PULOU, detalhe=t(
+                "prose em-dash in %d file(s), but no test command to confirm the swap",
+                "travessão de prosa em %d arquivo(s), "
+                "mas sem comando de teste pra confirmar a troca") % len(correcoes),
+                corrigiu=False)
         tocados = list(correcoes)
         try:
             for rel, corrigido in correcoes.items():
@@ -679,20 +696,21 @@ class PortaoEmDash(Portao):
                 sh(["git", "checkout", "--", *tocados], cwd=wt)
                 return Resultado(
                     REPROVOU,
-                    motivo="Testes do escopo falham depois de trocar o travessão por vírgula",
+                    motivo=t("Scoped tests fail after swapping the em-dash for a comma",
+                             "Testes do escopo falham depois de trocar o travessão por vírgula"),
                     corrigiu=True)
             add = sh(["git", "add", "--", *tocados], cwd=wt)
             if add.returncode != 0:
                 _voltar_ao_head(sh, wt, tocados)
-                return Resultado(PULOU, detalhe=f"git add falhou: {(add.stderr or '').strip()}",
+                return Resultado(PULOU, detalhe=t("git add failed: ", "git add falhou: ") + (add.stderr or "").strip(),
                                  corrigiu=False)
             commit = sh(["git", "commit", "-q", "-m", "Troca travessao por virgula"], cwd=wt)
             if commit.returncode != 0:
                 _voltar_ao_head(sh, wt, tocados)
                 return Resultado(
-                    PULOU, detalhe=f"git commit falhou: {(commit.stderr or '').strip()}",
+                    PULOU, detalhe=t("git commit failed: ", "git commit falhou: ") + (commit.stderr or "").strip(),
                     corrigiu=False)
-            return Resultado(APROVOU, detalhe=f"corrigido em {len(tocados)} arquivo(s)",
+            return Resultado(APROVOU, detalhe=t("fixed in %d file(s)", "corrigido em %d arquivo(s)") % len(tocados),
                              corrigiu=True)
         except Exception as exc:  # noqa: BLE001: portão não pode derrubar o chamador
             self.log(f"{self.nome}: {exc}")

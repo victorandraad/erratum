@@ -64,6 +64,8 @@ class TestInglesPorPadrao(_Idioma):
         self.cli("fix", "1", "run worktree prep", "--test", "test_prep")
         _, saida = self.cli("find", ERRO)
         self.assertIn("   fix: run worktree prep [test: test_prep]", saida)
+        _, saida = self.cli("find", "bin/runner no such file")
+        self.assertIn("1. [fts] maybe (", saida)
 
     def test_top(self):
         self.assertEqual(self.cli("top")[1].strip(), "nothing repeating")
@@ -111,3 +113,17 @@ class TestPortuguesComErratumLang(_Idioma):
         wt = self._repo_limpo()
         _, saida = self.cli("gate", "em-dash", "--base", "HEAD~1", "--worktree", str(wt))
         self.assertTrue(saida.startswith("em-dash: aprovou nenhum travessão de prosa"), saida)
+
+
+class TestHookCheckCmd(_Idioma):
+    def _aviso(self):
+        import runpy
+        hook = runpy.run_path(str(Path(__file__).parent.parent / "hooks" / "pretooluse-check-cmd.py"))
+        return hook["_aviso_de"]({"receita": "esperar-ci", "comando": "bin/ci-espera", "perigo": "bg"})
+
+    def test_ingles_por_padrao(self):
+        self.assertEqual(self._aviso(), "use recipe esperar-ci: bin/ci-espera\ndanger: bg\n")
+
+    def test_pt(self):
+        os.environ["ERRATUM_LANG"] = "pt"
+        self.assertEqual(self._aviso(), "use a receita esperar-ci: bin/ci-espera\nperigo: bg\n")

@@ -12,10 +12,12 @@ from pathlib import Path
 
 from erratum.banco import Banco
 from erratum.decisao import Decisao
+from erratum.idioma import t
 from erratum.ledger import ErroNaoEncontrado, Ledger
 from erratum.receitas import Receita
 
-_MSG_ABSTAIN = "nada parecido com confiança no ledger"
+def _msg_abstain():
+    return t("no confident match in the ledger", "nada parecido com confiança no ledger")
 
 
 class _UsoErrado(Exception):
@@ -53,7 +55,7 @@ class WorktreeDoGate:
         try:
             topo = self._git(worktree, "rev-parse", "--show-toplevel")
             if topo.returncode != 0:
-                return "worktree não é um repositório git"
+                return t("worktree is not a git repository", "worktree não é um repositório git")
             if staged:
                 return None
             commit = self._git(
@@ -65,14 +67,14 @@ class WorktreeDoGate:
                 "%s^{commit}" % base,
             )
             if commit.returncode != 0:
-                return "base não resolve para um commit"
+                return t("base does not resolve to a commit", "base não resolve para um commit")
             status = self._git(
                 worktree, "status", "--porcelain", "--untracked-files=no"
             )
             if status.stdout.strip():
-                return "há alteração rastreada não commitada"
+                return t("uncommitted tracked changes", "há alteração rastreada não commitada")
         except OSError:
-            return "worktree não é um repositório git"
+            return t("worktree is not a git repository", "worktree não é um repositório git")
         return None
 
     def _git(self, worktree, *args):
@@ -97,7 +99,8 @@ class Comando(ABC):
     def _avisar_regra_antiga(self, ledger):
         if ledger.regra_desatualizada():
             self._aviso.write(
-                "assinaturas com regra antiga: rode erratum reindex\n"
+                t("signatures use an old rule: run erratum reindex\n",
+                  "assinaturas com regra antiga: rode erratum reindex\n")
             )
 
     @abstractmethod
@@ -154,11 +157,12 @@ class ComandoErr(Comando):
             )
             return 0
         self._saida.write(
-            "erro #%d registrado [%s] assinatura: %s\n"
+            t("error #%d recorded [%s] signature: %s\n",
+              "erro #%d registrado [%s] assinatura: %s\n")
             % (erro.id, erro.projeto, erro.assinatura)
         )
         if decisao.veredito == "abstain":
-            self._saida.write("%s\n" % _MSG_ABSTAIN)
+            self._saida.write("%s\n" % _msg_abstain())
             return 0
         for i, pista in enumerate(pistas):
             for correcao in pista.correcoes:
@@ -211,10 +215,22 @@ class ComandoFix(Comando):
             self._escrever_json({"correcao": asdict(correcao)})
             return 0
         self._saida.write(
-            "correção #%d registrada [%s] para: %s\n"
+            t("fix #%d recorded [%s] for: %s\n", "correção #%d registrada [%s] para: %s\n")
             % (correcao.id, correcao.projeto, correcao.assinatura)
         )
         return 0
+
+
+_VEREDITO_EN = {
+    "aprovou": "passed",
+    "reprovou": "failed",
+    "pulou": "skipped",
+    "talvez": "maybe",
+}
+
+
+def _veredito_humano(veredito):
+    return t(_VEREDITO_EN.get(veredito, veredito), veredito)
 
 
 def _sufixo_de_correcao(correcao):
@@ -222,30 +238,30 @@ def _sufixo_de_correcao(correcao):
     if correcao.ref:
         extra.append("ref: %s" % correcao.ref)
     if correcao.teste:
-        extra.append("teste: %s" % correcao.teste)
+        extra.append(t("test: %s", "teste: %s") % correcao.teste)
     return " [%s]" % ", ".join(extra) if extra else ""
 
 
 def _linha_pista_curta(correcao):
     # só a primeira pista vem inteira; o resto é candidato fraco da busca por texto
-    return "  talvez: %s%s\n" % (
+    return t("  maybe: %s%s\n", "  talvez: %s%s\n") % (
         correcao.nota.split("\n", 1)[0],
         _sufixo_de_correcao(correcao),
     )
 
 
 def _linha_pista(correcao, receita=None):
-    texto = "  correção conhecida: %s%s\n" % (
+    texto = t("  known fix: %s%s\n", "  correção conhecida: %s%s\n") % (
         correcao.nota,
         _sufixo_de_correcao(correcao),
     )
     if receita is not None:
-        texto += "  receita %s: %s\n" % (
+        texto += t("  recipe %s: %s\n", "  receita %s: %s\n") % (
             receita.nome,
             receita.comando_obrigatorio(),
         )
         if receita.perigo:
-            texto += "  perigo: %s\n" % receita.perigo
+            texto += t("  danger: %s\n", "  perigo: %s\n") % receita.perigo
     return texto
 
 
@@ -274,31 +290,34 @@ class ComandoTop(Comando):
             )
             return 0
         if not padroes:
-            self._saida.write("nada se repetindo\n")
+            self._saida.write(t("nothing repeating\n", "nada se repetindo\n"))
         else:
             for p in padroes:
-                estado = "resolvido" if p.resolvido else "sem correção"
+                estado = (t("resolved", "resolvido") if p.resolvido
+                          else t("no fix", "sem correção"))
                 self._saida.write(
                     "%3dx  %d tasks  %-13s %s\n"
                     % (p.ocorrencias, p.tasks, estado, p.assinatura)
                 )
         if improvisos:
-            self._saida.write("improvisos\n")
+            self._saida.write(t("improvisations\n", "improvisos\n"))
             for item in improvisos:
                 self._saida.write(
                     "%3dx  %s\n" % (item["desvios"], item["receita"])
                 )
-        for t in taxas:
-            julgados = t.rodadas - t.pulou
-            linha = "portão %s: %d/%d reprovou (%d%%), %d pulou" % (
-                t.portao,
-                t.reprovou,
+        for taxa in taxas:
+            julgados = taxa.rodadas - taxa.pulou
+            linha = t("gate %s: %d/%d failed (%d%%), %d skipped",
+                      "portão %s: %d/%d reprovou (%d%%), %d pulou") % (
+                taxa.portao,
+                taxa.reprovou,
                 julgados,
-                int(round(t.taxa * 100)),
-                t.pulou,
+                int(round(taxa.taxa * 100)),
+                taxa.pulou,
             )
-            if t.nunca_decidiu:
-                linha += "  [!] nunca decidiu: portão quebrado?"
+            if taxa.nunca_decidiu:
+                linha += t("  [!] never decided: broken gate?",
+                           "  [!] nunca decidiu: portão quebrado?")
             self._saida.write(linha + "\n")
         return 0
 
@@ -323,7 +342,7 @@ class ComandoWin(Comando):
             self._escrever_json({"acerto": asdict(acerto), "streak": streak})
             return 0
         self._saida.write(
-            "acerto #%d registrado [%s] streak: %d\n"
+            t("win #%d recorded [%s] streak: %d\n", "acerto #%d registrado [%s] streak: %d\n")
             % (acerto.id, acerto.projeto, streak)
         )
         return 0
@@ -392,7 +411,7 @@ class ComandoGate(Comando):
         else:
             for nome, r in resultados:
                 self._saida.write(
-                    "%s: %s %s\n" % (nome, r.veredito, r.motivo or r.detalhe)
+                    "%s: %s %s\n" % (nome, _veredito_humano(r.veredito), r.motivo or r.detalhe)
                 )
         return 1 if any(r.reprovou for _, r in resultados) else 0
 
@@ -421,7 +440,7 @@ class ComandoHow(Comando):
             )
             return 0
         if decisao.veredito == "abstain":
-            self._saida.write("sem receita pra isso\n")
+            self._saida.write(t("no recipe for that\n", "sem receita pra isso\n"))
             return 0
         for i, achado in enumerate(achados, 1):
             rec = achado.receita
@@ -432,19 +451,19 @@ class ComandoHow(Comando):
                 % (
                     i,
                     achado.origem,
-                    achado.veredito,
+                    _veredito_humano(achado.veredito),
                     achado.confianca,
                     rec.nome,
                 )
             )
             if rec.quando:
-                self._saida.write("   quando: %s\n" % rec.quando)
+                self._saida.write(t("   when: %s\n", "   quando: %s\n") % rec.quando)
             if rec.comando:
-                self._saida.write("   rode: %s\n" % rec.comando)
+                self._saida.write(t("   run: %s\n", "   rode: %s\n") % rec.comando)
             if rec.notas:
-                self._saida.write("   notas: %s\n" % rec.notas)
+                self._saida.write(t("   notes: %s\n", "   notas: %s\n") % rec.notas)
             if rec.perigo:
-                self._saida.write("   perigo: %s\n" % rec.perigo)
+                self._saida.write(t("   danger: %s\n", "   perigo: %s\n") % rec.perigo)
         return 0
 
 
@@ -484,7 +503,7 @@ class ComandoFind(Comando):
             )
             return 0
         if decisao.veredito == "abstain":
-            self._saida.write("%s\n" % _MSG_ABSTAIN)
+            self._saida.write("%s\n" % _msg_abstain())
             return 0
         for i, achado in enumerate(achados, 1):
             self._saida.write(
@@ -492,14 +511,14 @@ class ComandoFind(Comando):
                 % (
                     i,
                     achado.origem,
-                    achado.veredito,
+                    _veredito_humano(achado.veredito),
                     achado.confianca,
                     achado.assinatura,
                 )
             )
             for correcao in achado.correcoes:
                 self._saida.write(
-                    "   correção: %s%s\n"
+                    t("   fix: %s%s\n", "   correção: %s%s\n")
                     % (correcao.nota, _sufixo_de_correcao(correcao))
                 )
         return 0
@@ -590,10 +609,11 @@ class ComandoScan(Comando):
             )
             return 0
         self._saida.write(
-            "scan: %d lidos, %d novos\n" % (len(erros), novos)
+            t("scan: %d read, %d new\n", "scan: %d lidos, %d novos\n") % (len(erros), novos)
         )
         self._saida.write(
-            "receitas: %d desvios, %d usos\n" % (desvios, usos)
+            t("recipes: %d deviations, %d uses\n", "receitas: %d desvios, %d usos\n")
+            % (desvios, usos)
         )
         for grupo in grupos:
             self._saida.write(
@@ -648,9 +668,11 @@ class ComandoSeed(Comando):
                 }
             )
             return 0
-        self._saida.write("semeou %d novas (total %d)\n" % (novas, total))
         self._saida.write(
-            "receitas: %d novas (total %d)\n"
+            t("seeded %d new (total %d)\n", "semeou %d novas (total %d)\n") % (novas, total)
+        )
+        self._saida.write(
+            t("recipes: %d new (total %d)\n", "receitas: %d novas (total %d)\n")
             % (receitas_novas, receitas_total)
         )
         return 0
@@ -695,12 +717,13 @@ class ComandoEfeito(Comando):
         for g in dado["tasks"]:
             linha = "%s N=%d" % (g["grupo"], g["n"])
             if g["amostra_pequena"]:
-                linha += " amostra pequena, não conclua"
+                linha += t(" small sample, do not conclude", " amostra pequena, não conclua")
             self._saida.write(linha + "\n")
         for r in dado.get("receitas") or []:
             pct = int(round((r["taxa_de_uso"] or 0) * 100))
             self._saida.write(
-                "receita %s: %d uso, %d desvios (%d%% pela receita)\n"
+                t("recipe %s: %d use, %d deviations (%d%% via recipe)\n",
+                  "receita %s: %d uso, %d desvios (%d%% pela receita)\n")
                 % (r["receita"], r["usos"], r["desvios"], pct)
             )
         return 0
@@ -752,7 +775,8 @@ class ComandoRecipe(Comando):
             self._escrever_json({"receita": asdict(gravada)})
             return 0
         self._saida.write(
-            "receita %s registrada [%s]\n" % (gravada.nome, gravada.projeto)
+            t("recipe %s recorded [%s]\n", "receita %s registrada [%s]\n")
+            % (gravada.nome, gravada.projeto)
         )
         return 0
 
@@ -786,7 +810,7 @@ class ComandoRecipe(Comando):
         if args.json:
             self._escrever_json({"removeu": n})
             return 0
-        self._saida.write("receita %s removida\n" % args.nome)
+        self._saida.write(t("recipe %s removed\n", "receita %s removida\n") % args.nome)
         return 0
 
 
@@ -814,11 +838,11 @@ class ComandoCheckCmd(Comando):
             )
         elif resultado.tipo == "desvio" and receita is not None:
             self._saida.write(
-                "use a receita %s: %s\n"
+                t("use recipe %s: %s\n", "use a receita %s: %s\n")
                 % (receita.nome, receita.comando_obrigatorio())
             )
             if receita.perigo:
-                self._saida.write("perigo: %s\n" % receita.perigo)
+                self._saida.write(t("danger: %s\n", "perigo: %s\n") % receita.perigo)
         return 1 if resultado.tipo == "desvio" else 0
 
 
@@ -834,9 +858,9 @@ class ComandoCompactar(Comando):
         if args.json:
             self._escrever_json(asdict(r))
             return 0
-        extra = " (simulado)" if args.dry_run else ""
+        extra = t(" (dry run)", " (simulado)") if args.dry_run else ""
         self._saida.write(
-            "compactar%s: %d -> %d linhas\n"
+            t("compact%s: %d -> %d lines\n", "compactar%s: %d -> %d linhas\n")
             % (extra, r.linhas_antes, r.linhas_depois)
         )
         return 0
@@ -853,9 +877,10 @@ class ComandoReindex(Comando):
         if args.json:
             self._escrever_json(asdict(r))
             return 0
-        extra = " (simulado)" if r.simulado else ""
+        extra = t(" (dry run)", " (simulado)") if r.simulado else ""
         self._saida.write(
-            "reindex%s: %d -> %d assinaturas\n" % (extra, r.antes, r.depois)
+            t("reindex%s: %d -> %d signatures\n", "reindex%s: %d -> %d assinaturas\n")
+            % (extra, r.antes, r.depois)
         )
         return 0
 
@@ -887,7 +912,8 @@ class ComandoImport(Comando):
             )
             return 0
         self._saida.write(
-            "import: %d lidos, %d novos, %d ignorados\n"
+            t("import: %d read, %d new, %d ignored\n",
+              "import: %d lidos, %d novos, %d ignorados\n")
             % (relatorio.lidos, relatorio.novos, relatorio.ignorados)
         )
         return 0

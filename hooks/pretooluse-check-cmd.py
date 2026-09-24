@@ -123,9 +123,11 @@ def _pula_verificacao(comando):
 def _aviso_de(dado):
     nome = dado.get("receita") or ""
     comando = dado.get("comando") or ""
-    aviso = "use a receita %s: %s\n" % (nome, comando)
+    # mesmo contrato de erratum.idioma, sem importar o pacote
+    pt = os.environ.get("ERRATUM_LANG", "").lower().startswith("pt")
+    aviso = ("use a receita %s: %s\n" if pt else "use recipe %s: %s\n") % (nome, comando)
     if dado.get("perigo"):
-        aviso += "perigo: %s\n" % dado["perigo"]
+        aviso += ("perigo: %s\n" if pt else "danger: %s\n") % dado["perigo"]
     return aviso
 
 

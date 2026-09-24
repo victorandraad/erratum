@@ -10,6 +10,7 @@ import unicodedata
 from abc import ABC, abstractmethod
 
 from erratum.dominio import Achado, Assinatura
+from erratum.idioma import t
 
 
 def _dobrar(texto):
@@ -224,7 +225,7 @@ class BuscaExterna(Buscador):
 
     def _avisar(self, motivo):
         texto = str(motivo).replace("\n", " ")
-        self._aviso.write("busca externa falhou: %s\n" % texto)
+        self._aviso.write(t("external search failed: %s\n", "busca externa falhou: %s\n") % texto)
 
 
 class BuscaEmCascata(Buscador):

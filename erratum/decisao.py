@@ -9,6 +9,8 @@ import subprocess
 import sys
 from dataclasses import dataclass, replace
 
+from erratum.idioma import t
+
 
 def _escrever(aviso, texto):
     destino = sys.stderr if aviso is None else aviso
@@ -66,7 +68,8 @@ class Limiar:
         try:
             return float(bruto)
         except (TypeError, ValueError):
-            _escrever(aviso, "%s valor invalido, usando o padrao\n" % nome)
+            _escrever(aviso, t("%s invalid value, using the default\n",
+                               "%s valor invalido, usando o padrao\n") % nome)
             return padrao
 
     def classificar(self, achados):
@@ -272,4 +275,4 @@ class JuizExterno:
 
     def _falhou(self, motivo):
         texto = str(motivo).replace("\n", " ")
-        _escrever(self._aviso, "juiz externo falhou: %s\n" % texto)
+        _escrever(self._aviso, t("external judge failed: %s\n", "juiz externo falhou: %s\n") % texto)
