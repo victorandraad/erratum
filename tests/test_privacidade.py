@@ -76,7 +76,10 @@ class VarreduraDePrivacidade:
         """Lista de 'arquivo:linha: motivo'. O motivo nunca repete o termo: só o prefixo do hash."""
         achados = []
         for nome in self.arquivos():
-            texto = (self._raiz / nome).read_text(encoding="utf-8", errors="replace")
+            dados = (self._raiz / nome).read_bytes()
+            if b"\0" in dados:  # binario (imagem): texto privado nao mora ali
+                continue
+            texto = dados.decode("utf-8", errors="replace")
             for n, linha in enumerate(texto.splitlines(), 1):
                 for motivo in self._motivos(linha):
                     achados.append("%s:%d: %s" % (nome, n, motivo))
