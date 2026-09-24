@@ -1,0 +1,26 @@
+
+> jj@1.0.0 test
+> jest
+
+FAIL ./soma.test.js
+  ✕ soma (12 ms)
+
+  ● soma
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 5
+    Received: -1
+
+      1 | const soma=(a,b)=>a-b;
+    > 2 | test("soma", () => { expect(soma(2,3)).toBe(5); });
+        |                                        ^
+      3 |
+
+      at Object.toBe (soma.test.js:2:40)
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 1 total
+Snapshots:   0 total
+Time:        2 s
+Ran all test suites.

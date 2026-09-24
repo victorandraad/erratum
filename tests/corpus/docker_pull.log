@@ -1,0 +1,1 @@
+Error response from daemon: pull access denied for imagem-que-nao-existe-xyz, repository does not exist or may require 'docker login'

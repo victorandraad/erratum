@@ -1,0 +1,5 @@
+/home/dev/cli/main.c: In function ‘main’:
+/home/dev/cli/main.c:2:32: error: ‘x’ undeclared (first use in this function)
+    2 | int main(void){ printf("%d\n", x); return 0; }
+      |                                ^
+/home/dev/cli/main.c:2:32: note: each undeclared identifier is reported only once for each function it appears in

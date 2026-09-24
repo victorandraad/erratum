@@ -1,0 +1,20 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0
+rootdir: /home/dev/loja
+plugins: anyio-4.14.2
+collected 1 item
+
+tests/test_calc.py F                                                     [100%]
+
+=================================== FAILURES ===================================
+__________________________________ test_soma ___________________________________
+
+    def test_soma():
+>       assert soma(2, 3) == 5
+E       assert -1 == 5
+E        +  where -1 = soma(2, 3)
+
+tests/test_calc.py:5: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_calc.py::test_soma - assert -1 == 5
+============================== 1 failed in 0.14s ===============================
