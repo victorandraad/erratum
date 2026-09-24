@@ -153,7 +153,7 @@ class JuizExterno:
             return achados
         comando = self._comando or ""
         if not str(comando).strip():
-            self._falhou("comando vazio")
+            self._falhou(t("empty command", "comando vazio"))
             return achados
         pedido = {
             "erro": texto,
@@ -175,7 +175,7 @@ class JuizExterno:
             self._falhou(exc)
             return achados
         if not argv:
-            self._falhou("comando vazio")
+            self._falhou(t("empty command", "comando vazio"))
             return achados
         bruto = self._rodar(json.dumps(pedido, ensure_ascii=False), argv)
         if bruto is None:
@@ -203,15 +203,15 @@ class JuizExterno:
             self._falhou(exc)
             return None
         if proc.returncode != 0:
-            self._falhou("codigo %s" % proc.returncode)
+            self._falhou(t("exit code %s", "codigo %s") % proc.returncode)
             return None
         try:
             dado = json.loads(saida or "")
         except (TypeError, ValueError, json.JSONDecodeError):
-            self._falhou("json invalido")
+            self._falhou(t("invalid json", "json invalido"))
             return None
         if not isinstance(dado, dict):
-            self._falhou("json invalido")
+            self._falhou(t("invalid json", "json invalido"))
             return None
         return dado
 
@@ -232,7 +232,7 @@ class JuizExterno:
 
     def _aplicar(self, dado, achados):
         if "escolha" not in dado:
-            self._falhou("sem escolha")
+            self._falhou(t("no choice", "sem escolha"))
             return achados
         escolha = dado["escolha"]
         if escolha == "abstain":
@@ -240,15 +240,15 @@ class JuizExterno:
         por_id = {str(i): a for i, a in enumerate(achados, 1)}
         chave = str(escolha)
         if chave not in por_id:
-            self._falhou("id desconhecido")
+            self._falhou(t("unknown id", "id desconhecido"))
             return achados
         confianca = dado.get("confianca")
         if isinstance(confianca, bool) or not isinstance(confianca, (int, float)):
-            self._falhou("confianca invalida")
+            self._falhou(t("invalid confidence", "confianca invalida"))
             return achados
         confianca = float(confianca)
         if not math.isfinite(confianca) or confianca < 0.0 or confianca > 1.0:
-            self._falhou("confianca invalida")
+            self._falhou(t("invalid confidence", "confianca invalida"))
             return achados
         mesmo = dado.get("mesmo_erro")
         if not isinstance(mesmo, dict):

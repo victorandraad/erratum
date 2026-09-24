@@ -129,6 +129,11 @@ class TesteHookPreToolUse(unittest.TestCase):
             self.assertIn("--no-verify", proc.stderr, comando)
             self.assertIn("portão", proc.stderr, comando)
 
+    def test_commit_no_verify_barrado_em_ingles_por_padrao(self):
+        proc = self._rodar(self._payload("git commit --no-verify -m x"), ERRATUM_LANG="")
+        self.assertEqual(proc.returncode, 2)
+        self.assertIn("fix the gate that failed", proc.stderr)
+
     def test_commit_sem_no_verify_passa(self):
         for comando in ('git commit -m "x"', 'git commit -m "usa -n aqui"',
                         "git commit -m 'pula --no-verify nunca'", "git log -n 3",

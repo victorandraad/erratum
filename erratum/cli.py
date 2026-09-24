@@ -669,7 +669,7 @@ class ComandoSeed(Comando):
             )
             return 0
         self._saida.write(
-            t("seeded %d new (total %d)\n", "semeou %d novas (total %d)\n") % (novas, total)
+            t("seeded %d new fixes (total %d)\n", "semeou %d novas (total %d)\n") % (novas, total)
         )
         self._saida.write(
             t("recipes: %d new (total %d)\n", "receitas: %d novas (total %d)\n")
@@ -722,7 +722,7 @@ class ComandoEfeito(Comando):
         for r in dado.get("receitas") or []:
             pct = int(round((r["taxa_de_uso"] or 0) * 100))
             self._saida.write(
-                t("recipe %s: %d use, %d deviations (%d%% via recipe)\n",
+                t("recipe %s: %d uses, %d deviations (%d%% via recipe)\n",
                   "receita %s: %d uso, %d desvios (%d%% pela receita)\n")
                 % (r["receita"], r["usos"], r["desvios"], pct)
             )

@@ -192,7 +192,7 @@ class BuscaExterna(Buscador):
         try:
             comando = self._comando or ""
             if not comando.strip():
-                self._avisar("comando vazio")
+                self._avisar(t("empty command", "comando vazio"))
                 return []
             proc = subprocess.run(
                 shlex.split(comando) + [texto],
@@ -201,7 +201,7 @@ class BuscaExterna(Buscador):
                 timeout=self.timeout,
             )
             if proc.returncode != 0:
-                self._avisar("codigo %s" % proc.returncode)
+                self._avisar(t("exit code %s", "codigo %s") % proc.returncode)
                 return []
             achados = []
             for linha in proc.stdout.splitlines():

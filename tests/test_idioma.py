@@ -85,6 +85,10 @@ class TestInglesPorPadrao(_Idioma):
         self.assertTrue(saida.startswith("em-dash: passed "), saida)
         self.assertNotIn("travessão", saida)
 
+    def test_seed_diz_o_que_semeou(self):
+        self.assertIn("seeded ", self.cli("seed")[1])
+        self.assertRegex(self.cli("seed")[1], r"seeded \d+ new fixes \(total \d+\)")
+
     def test_json_mantem_chaves_e_valores_de_dado(self):
         _, saida = self.cli("err", ERRO, "--json")
         self.assertEqual(set(json.loads(saida)), {"erro", "pistas", "veredito", "confianca"})

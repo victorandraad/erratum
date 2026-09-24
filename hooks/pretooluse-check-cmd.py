@@ -139,8 +139,12 @@ def main():
     if comando is None:
         _sair(0)
     if _pula_verificacao(comando):
-        sys.stderr.write("git commit --no-verify (ou -n) barrado: rode o commit sem --no-verify "
-                         "e conserte o portão que reprovou.\n")
+        pt = os.environ.get("ERRATUM_LANG", "").lower().startswith("pt")
+        sys.stderr.write(
+            "git commit --no-verify (ou -n) barrado: rode o commit sem --no-verify "
+            "e conserte o portão que reprovou.\n" if pt else
+            "git commit --no-verify (or -n) blocked: commit without --no-verify "
+            "and fix the gate that failed.\n")
         _sair(2)
     proc = _checar(comando, dado)
     if proc is None:
