@@ -23,8 +23,8 @@ comando aceita `--json`. Texto longo entra por stdin com `-`.
 erratum err "<erro cru>" --stage <dev|teste|ci|deploy|merge> --tool <Bash|pytest|...>
 ```
 
-Se voltar `correção conhecida:`, aplique essa primeiro; só investigue do zero se ela não servir.
-Linhas `talvez:` são candidatos fracos da busca por texto: leia, mas não confie às cegas.
+Se voltar `known fix:` (ou `correção conhecida:` com `ERRATUM_LANG=pt`), aplique essa primeiro; só investigue do zero se ela não servir.
+Linhas `maybe:` (`talvez:` em pt) são candidatos fracos da busca por texto: leia, mas não confie às cegas.
 Para consultar sem registrar: `erratum find "<texto>" -n 3 --resolved`.
 
 **2. Resolveu: registre a correção.** A nota diz a CAUSA e o que fazer, em uma frase que sirva para

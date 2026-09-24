@@ -143,7 +143,11 @@ serviço com confirmação de saúde), cada uma com o improviso que ela substitu
 
 ## Em 30 segundos
 
+A saída humana é em inglês por padrão. Para ver em português, como nos exemplos abaixo,
+exporte `ERRATUM_LANG=pt`. O `--json` é igual nos dois idiomas.
+
 ```sh
+export ERRATUM_LANG=pt
 erratum err "Exit code 127 /tmp/w-1/bin/runner: No such file"
 # erro #1 registrado [acme] assinatura: exit code N /PATH: no such file
 

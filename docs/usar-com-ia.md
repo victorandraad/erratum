@@ -13,7 +13,7 @@ Copilot ou no prompt de sistema do seu orquestrador:
 
 - FALHOU (comando, teste, build, deploy, merge): antes de investigar, rode
   `erratum err "<linha do erro, crua>" --stage <etapa> --tool <ferramenta>`.
-  Se vier "correção conhecida", aplique essa primeiro. Linhas "talvez:" são candidatos fracos.
+  Se vier "known fix" ("correção conhecida" com `ERRATUM_LANG=pt`), aplique essa primeiro. Linhas "maybe:" ("talvez:") são candidatos fracos.
 - RESOLVEU algo novo: `erratum fix <id do erro> "<causa + o que fazer>" --ref <commit> --test <teste de regressão>`.
   A nota tem de servir para quem nunca viu o caso.
 - ANTES DE IMPROVISAR um procedimento (esperar CI, reiniciar serviço, rodar a suíte, consultar o
