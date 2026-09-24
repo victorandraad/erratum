@@ -205,6 +205,7 @@ erratum gate em-dash,stub-neutro,fix-noop --base main --test-cmd "python -B -m u
 | Portão | Reprova quando |
 |---|---|
 | `fix-noop` | os testes do diff passam mesmo com o código de produção revertido: a correção não corrige, ou o teste passa sempre |
+| `fix-noop` (`instrumento-morto`) | os testes do diff já falham com a correção aplicada: teste quebrado de nascença não prova nada |
 | `stub-neutro` | uma classe nova cumpre o contrato devolvendo constante neutra (`[]`, `None`, `0`) em todos os métodos |
 | `em-dash` | trocar o travessão de prosa por vírgula quebra os testes (no caso normal ele corrige, commita e aprova) |
 

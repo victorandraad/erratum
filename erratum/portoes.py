@@ -203,6 +203,7 @@ class PortaoFixNoop(Portao):
     prova nada (no-op, ou teste que sempre passa): REPROVOU. Se falha, há regressão real que o teste
     captura: APROVOU. Restaura a produção no finally em sucesso, no-op E exceção.
 
+    Antes de reverter, roda os mesmos testes COM o patch: se já falham, REPROVOU `instrumento-morto`.
     Sem comando de teste configurado: PULOU com motivo (não há como provar nada).
     Alteração rastreada pendente no worktree ou no índice: PULOU sem tocar em arquivo nem rodar teste.
     # ponytail: em projeto Python, use `python -B ...` no comando: o portão troca o fonte e destroca
@@ -224,6 +225,13 @@ class PortaoFixNoop(Portao):
             return _pulou(
                 "alteracao rastreada pendente no worktree "
                 f"({len(pendentes)} arquivo(s)): commite ou guarde antes")
+        # Baseline: teste que já falha COM o patch não prova nada (quebrado de nascença).
+        base = self.diff.rodar_testes(self.comandos_de_teste, testes)
+        if base.returncode != 0:
+            saida = f"{base.stdout or ''}\n{base.stderr or ''}"
+            cauda = " | ".join([l for l in saida.splitlines() if l.strip()][-5:])
+            return Resultado(REPROVOU, motivo="instrumento-morto: os testes do escopo já falham "
+                             f"com a correção aplicada (teste quebrado não prova nada): {cauda}")
         sh, wt = self.diff.sh, str(self.diff.worktree)
         orig_sha = (sh(["git", "rev-parse", "HEAD"], cwd=wt).stdout or "").strip()
         resultado = _pulou("exceção")
