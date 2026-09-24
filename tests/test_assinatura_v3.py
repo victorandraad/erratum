@@ -51,6 +51,14 @@ class TestFocoEmLogBruto(unittest.TestCase):
         )
         self.assertTrue(Assinatura(texto).valor.startswith("keyerror: 'chave'"))
 
+    def test_traceback_encadeado_foca_na_ultima_excecao(self):
+        texto = (
+            "Traceback (most recent call last):\n  File \"a.py\", line 1\nKeyError: 'x'\n\n"
+            "During handling of the above exception, another exception occurred:\n\n"
+            "Traceback (most recent call last):\n  File \"a.py\", line 3\nValueError: final\n"
+        )
+        self.assertTrue(Assinatura(texto).valor.startswith("valueerror: final"))
+
     def test_tsc_enterrado_depois_do_npm_run(self):
         texto = "> app@1.0.0 build\n> tsc -p . --pretty false\n" * 3 + "src/a.ts(3,1): error TS2304: Cannot find name 'x'.\n"
         self.assertTrue(Assinatura(texto).valor.startswith("src/a.ts(N,N): error ts2304"))

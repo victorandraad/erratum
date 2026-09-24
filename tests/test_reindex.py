@@ -210,6 +210,15 @@ class TestDivisaoComCorrecao(CasoComLedger):
             con.execute("DELETE FROM fixes")
         self.assertEqual(Reindexador(self.banco).rodar().divisoes, ())
 
+    def test_correcao_de_semente_com_texto_nao_e_divisao(self):
+        # semente e recalculada pelo proprio texto no FTS, nao herda do mapa por maioria
+        self._semear()
+        with self.banco.transacao() as con:
+            con.execute("UPDATE fixes SET import_key = 'semente:tipo'")
+            con.execute("INSERT INTO ledger_fts(signature, text, note, src) VALUES "
+                        "('velha', 'error TS2322: tipo errado', 'tipar', 'seed:tipo')")
+        self.assertEqual(Reindexador(self.banco).rodar().divisoes, ())
+
     def test_cli_exit_1_lista_e_forcar_passa(self):
         self._semear()
         codigo, saida = self.cli("reindex", "--dry-run")
