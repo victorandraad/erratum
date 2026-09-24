@@ -1,0 +1,190 @@
+{
+  "versao_assinatura": 2,
+  "casos": [
+    {
+      "arquivo": "cc_undefined_ref.log",
+      "veredito": "abstain",
+      "assinatura_normalizada": "/PATH: /PATH: in function `main': link.c:(.text+NxN): undefined reference to `f' collectN: error: ld returned N exit sta"
+    },
+    {
+      "arquivo": "docker_pull.log",
+      "veredito": "talvez",
+      "assinatura_normalizada": "error response from daemon: pull access denied for imagem-que-nao-existe-xyz, repository does not exist or may require '"
+    },
+    {
+      "arquivo": "gcc_undeclared.log",
+      "veredito": "abstain",
+      "assinatura_normalizada": "main.c: in function ‘main’: main.c:N:N: error: ‘x’ undeclared (first use in this function) N | int main(void){ printf(\"%"
+    },
+    {
+      "arquivo": "gcc_undeclared_abs.log",
+      "veredito": "abstain",
+      "assinatura_normalizada": "/PATH: in function ‘main’: /PATH:N:N: error: ‘x’ undeclared (first use in this function) N | int main(void){ printf(\"%d\\"
+    },
+    {
+      "arquivo": "gcc_undeclared_abs1.log",
+      "veredito": "abstain",
+      "assinatura_normalizada": "/PATH: in function ‘main’: /PATH:N:N: error: ‘x’ undeclared (first use in this function) N | int main(void){ printf(\"%d\\"
+    },
+    {
+      "arquivo": "gh_not_found.log",
+      "veredito": "talvez",
+      "assinatura_normalizada": "graphql: could not resolve to a repository with the name 'org-que-nao-existe-xyz/PATH'. (repository)"
+    },
+    {
+      "arquivo": "git_merge_conflict.log",
+      "veredito": "match",
+      "assinatura_normalizada": "auto-merging app.py conflict (content): merge conflict in app.py automatic merge failed; fix conflicts and then commit t"
+    },
+    {
+      "arquivo": "git_pathspec.log",
+      "veredito": "match",
+      "assinatura_normalizada": "error: pathspec 'nao-existe' did not match any file(s) known to git",
+      "nota": "suspeito: casa como match com a semente worktree-sumiu, mas e so ref inexistente"
+    },
+    {
+      "arquivo": "git_push_rejected.log",
+      "veredito": "talvez",
+      "assinatura_normalizada": "to /PATH ! [rejected] main -> main (fetch first) error: failed to push some refs to '/PATH' hint: updates were rejected "
+    },
+    {
+      "arquivo": "node_module_not_found.log",
+      "veredito": "match",
+      "assinatura_normalizada": "node:internal/PATH:N throw err; ^ error: cannot find module 'pacote-inexistente' require stack: - /PATH at module._resol"
+    },
+    {
+      "arquivo": "node_typeerror.log",
+      "veredito": "abstain",
+      "assinatura_normalizada": "[eval]:N const o=undefined; o.map(x=>x) ^ typeerror: cannot read properties of undefined (reading 'map') at [eval]:N:N a"
+    },
+    {
+      "arquivo": "npm_e404.log",
+      "veredito": "talvez",
+      "assinatura_normalizada": "npm error code eN npm error N not found - get https:/PATH - not found npm error N npm error N the requested resource 'pa"
+    },
+    {
+      "arquivo": "npm_jest.log",
+      "veredito": "abstain",
+      "assinatura_normalizada": "> jj@N.N.N test > jest fail ./PATH ✕ soma (N ms) ● soma expect(received).tobe(expected) /PATH object.is equality expecte"
+    },
+    {
+      "arquivo": "npm_missing_script.log",
+      "veredito": "match",
+      "assinatura_normalizada": "npm error missing script: \"test\" npm error npm error to see a list of scripts, run: npm error npm run npm error a comple",
+      "nota": "falso positivo: casa como match com a semente timeout-do-gerenciador-de-pacotes"
+    },
+    {
+      "arquivo": "pip_notfound.log",
+      "veredito": "abstain",
+      "assinatura_normalizada": "error: externally-managed-environment × this environment is externally managed ╰─> to install python packages system-wid"
+    },
+    {
+      "arquivo": "pytest_assert_wtA.log",
+      "veredito": "abstain",
+      "assinatura_normalizada": "f [N%] =================================== failures =================================== ________________________________"
+    },
+    {
+      "arquivo": "pytest_assert_wtB.log",
+      "veredito": "abstain",
+      "assinatura_normalizada": "f [N%] =================================== failures =================================== ________________________________"
+    },
+    {
+      "arquivo": "pytest_full_header.log",
+      "veredito": "abstain",
+      "assinatura_normalizada": "============================= test session starts ============================== platform linux -- python N.N.N, pytest-"
+    },
+    {
+      "arquivo": "pytest_full_header_json.log",
+      "veredito": "abstain",
+      "assinatura_normalizada": "============================= test session starts ============================== platform linux -- python N.N.N, pytest-"
+    },
+    {
+      "arquivo": "pytest_full_header_wtB.log",
+      "veredito": "abstain",
+      "assinatura_normalizada": "============================= test session starts ============================== platform linux -- python N.N.N, pytest-"
+    },
+    {
+      "arquivo": "pytest_jsondecode.log",
+      "veredito": "abstain",
+      "assinatura_normalizada": "f [N%] =================================== failures =================================== ________________________________"
+    },
+    {
+      "arquivo": "python_keyerror.log",
+      "veredito": "abstain",
+      "assinatura_normalizada": "traceback (most recent call last): file \"<string>\", line N, in <module> keyerror: 'chave'"
+    },
+    {
+      "arquivo": "tsc_types.log",
+      "veredito": "talvez",
+      "assinatura_normalizada": "index.ts(N,N): error tsN: type 'string' is not assignable to type 'number'. index.ts(N,N): error tsN: property 'tamanho'"
+    },
+    {
+      "arquivo": "unittest_import.log",
+      "veredito": "abstain",
+      "assinatura_normalizada": "e ====================================================================== error: test_import (test_x.t.test_import) -----"
+    },
+    {
+      "arquivo": "unittest_import_wt2.log",
+      "veredito": "abstain",
+      "assinatura_normalizada": "e ====================================================================== error: test_import (test_x.t.test_import) -----"
+    }
+  ],
+  "pares": {
+    "distintos": [
+      [
+        "gcc_undeclared.log",
+        "cc_undefined_ref.log"
+      ],
+      [
+        "node_typeerror.log",
+        "node_module_not_found.log"
+      ],
+      [
+        "npm_missing_script.log",
+        "npm_e404.log"
+      ],
+      [
+        "git_merge_conflict.log",
+        "git_push_rejected.log"
+      ],
+      [
+        "unittest_import.log",
+        "python_keyerror.log"
+      ],
+      [
+        "docker_pull.log",
+        "gh_not_found.log"
+      ]
+    ],
+    "iguais": [
+      [
+        "pytest_assert_wtA.log",
+        "pytest_assert_wtB.log"
+      ],
+      [
+        "pytest_full_header.log",
+        "pytest_full_header_wtB.log"
+      ],
+      [
+        "unittest_import.log",
+        "unittest_import_wt2.log"
+      ],
+      [
+        "gcc_undeclared_abs.log",
+        "gcc_undeclared_abs1.log"
+      ]
+    ]
+  },
+  "colisoes_conhecidas": [
+    [
+      "pytest_assert_wtA.log",
+      "pytest_jsondecode.log",
+      "corte em 120 caracteres do log inteiro: pytest -q so difere depois do cabecalho FAILURES"
+    ],
+    [
+      "pytest_full_header.log",
+      "pytest_full_header_json.log",
+      "corte em 120 caracteres do log inteiro: o cabecalho da sessao do pytest ocupa tudo"
+    ]
+  ]
+}
