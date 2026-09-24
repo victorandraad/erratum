@@ -136,6 +136,11 @@ class TestVarredura(unittest.TestCase):
         for texto in casos:
             self.assertEqual(len(self._varrer("d.txt", texto + "\n")), 1, texto)
 
+    def test_binario_fica_fora(self):
+        # bytes aleatorios de imagem casam hash de 2 tokens por acaso (docs/img/erratum.webp)
+        (self.raiz / "e.webp").write_bytes(b"RIFF\x00\x01acmesecreto\n")
+        self.assertEqual(VarreduraDePrivacidade(self.raiz, hashes=self.extra).achados(), [])
+
     def test_isento_fica_fora(self):
         self.assertEqual(self._varrer("LICENSE", "acmesecreto\n", hashes=self.extra), [])
 
