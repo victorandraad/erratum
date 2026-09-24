@@ -61,7 +61,7 @@ class TestFocoEmLogBruto(unittest.TestCase):
 
     def test_tsc_enterrado_depois_do_npm_run(self):
         texto = "> app@1.0.0 build\n> tsc -p . --pretty false\n" * 3 + "src/a.ts(3,1): error TS2304: Cannot find name 'x'.\n"
-        self.assertTrue(Assinatura(texto).valor.startswith("src/a.ts(N,N): error ts2304"))
+        self.assertTrue(Assinatura(texto).valor.startswith("src/PATH: error ts2304"))
 
 
 class TestProsaDeAgenteSegueV2(unittest.TestCase):

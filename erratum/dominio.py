@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 
 class Assinatura:
-    VERSAO = 2
+    VERSAO = 3
     _RELATOR = re.compile(
         r"^\w+\s+(?:reportou(?:\s+falhou)?|reported(?:\s+failed)?):\s*"
         r"(?:(?:falhou|failed):\s*)*"
@@ -51,7 +51,16 @@ class Assinatura:
     )
     # o ':' depois do caminho precisa permanecer (mensagens "arquivo: motivo")
     _CAMINHO = re.compile(r"/[^\s\"':]+")
-    _DIGITOS = re.compile(r"\d+")
+    # v3: digito colado a letra e identidade (ts2322, e404); numero solto vira N
+    _DIGITOS = re.compile(r"(?<![a-z0-9])(?:0x[0-9a-f]+|\d+)")
+    # v3: so log bruto tem a linha do erro focada antes do corte de 120; prosa de agente
+    # fica como na v2 (heuristica ampla jogou 480 prosas em "falhou" no ledger real)
+    _FOCO = (
+        re.compile(r"^E {3}.*\S.*$", re.MULTILINE),
+        re.compile(r"^Traceback \(most recent call last\):\n(?:[ \t].*\n)*(\S.*)$", re.MULTILINE),
+        re.compile(r"^.*\berror TS\d+\b.*$", re.MULTILINE),
+        re.compile(r"^npm (?:error|ERR!) code \S+.*$", re.MULTILINE),
+    )
 
     def __init__(self, texto):
         self._valor = self._normalizar(texto)
@@ -110,10 +119,23 @@ class Assinatura:
         return texto
 
     @classmethod
+    def _focar(cls, texto):
+        for padrao in cls._FOCO:
+            # a ultima ocorrencia: em traceback encadeado e a excecao final que importa
+            m = None
+            for m in padrao.finditer(texto):
+                if padrao is not cls._FOCO[1]:
+                    break
+            if m:
+                linha = m.group(m.lastindex or 0)
+                return linha + "\n" + texto[:m.start(m.lastindex or 0)] + texto[m.end(m.lastindex or 0):]
+        return texto
+
+    @classmethod
     def _normalizar(cls, texto):
         if texto is None:
             texto = ""
-        texto = texto.strip().lower()
+        texto = cls._focar(texto.strip()).lower()
         texto = texto.replace("\n", " ")
         texto = cls._RELATOR.sub("", texto)
         texto = cls._RODADA.sub("", texto)

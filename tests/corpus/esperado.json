@@ -1,10 +1,10 @@
 {
-  "versao_assinatura": 2,
+  "versao_assinatura": 3,
   "casos": [
     {
       "arquivo": "cc_undefined_ref.log",
       "veredito": "abstain",
-      "assinatura_normalizada": "/PATH: /PATH: in function `main': link.c:(.text+NxN): undefined reference to `f' collectN: error: ld returned N exit sta"
+      "assinatura_normalizada": "/PATH: /PATH: in function `main': link.c:(.text+N): undefined reference to `f' collect2: error: ld returned N exit statu"
     },
     {
       "arquivo": "docker_pull.log",
@@ -60,7 +60,7 @@
     {
       "arquivo": "npm_e404.log",
       "veredito": "talvez",
-      "assinatura_normalizada": "npm error code eN npm error N not found - get https:/PATH - not found npm error N npm error N the requested resource 'pa"
+      "assinatura_normalizada": "npm error code e404 npm error N not found - get https:/PATH - not found npm error N npm error N the requested resource '"
     },
     {
       "arquivo": "npm_jest.log",
@@ -81,52 +81,52 @@
     {
       "arquivo": "pytest_assert_wtA.log",
       "veredito": "abstain",
-      "assinatura_normalizada": "f [N%] =================================== failures =================================== ________________________________"
+      "assinatura_normalizada": "e assert -N == N f [N%] =================================== failures =================================== _______________"
     },
     {
       "arquivo": "pytest_assert_wtB.log",
       "veredito": "abstain",
-      "assinatura_normalizada": "f [N%] =================================== failures =================================== ________________________________"
+      "assinatura_normalizada": "e assert -N == N f [N%] =================================== failures =================================== _______________"
     },
     {
       "arquivo": "pytest_full_header.log",
       "veredito": "abstain",
-      "assinatura_normalizada": "============================= test session starts ============================== platform linux -- python N.N.N, pytest-"
+      "assinatura_normalizada": "e assert -N == N ============================= test session starts ============================== platform linux -- pyth"
     },
     {
       "arquivo": "pytest_full_header_json.log",
       "veredito": "abstain",
-      "assinatura_normalizada": "============================= test session starts ============================== platform linux -- python N.N.N, pytest-"
+      "assinatura_normalizada": "e json.decoder.jsondecodeerror: expecting property name enclosed in double quotes: line N column N (char N) ============"
     },
     {
       "arquivo": "pytest_full_header_wtB.log",
       "veredito": "abstain",
-      "assinatura_normalizada": "============================= test session starts ============================== platform linux -- python N.N.N, pytest-"
+      "assinatura_normalizada": "e assert -N == N ============================= test session starts ============================== platform linux -- pyth"
     },
     {
       "arquivo": "pytest_jsondecode.log",
       "veredito": "abstain",
-      "assinatura_normalizada": "f [N%] =================================== failures =================================== ________________________________"
+      "assinatura_normalizada": "e json.decoder.jsondecodeerror: expecting property name enclosed in double quotes: line N column N (char N) f [N%] ====="
     },
     {
       "arquivo": "python_keyerror.log",
       "veredito": "abstain",
-      "assinatura_normalizada": "traceback (most recent call last): file \"<string>\", line N, in <module> keyerror: 'chave'"
+      "assinatura_normalizada": "keyerror: 'chave' traceback (most recent call last): file \"<string>\", line N, in <module>"
     },
     {
       "arquivo": "tsc_types.log",
       "veredito": "talvez",
-      "assinatura_normalizada": "index.ts(N,N): error tsN: type 'string' is not assignable to type 'number'. index.ts(N,N): error tsN: property 'tamanho'"
+      "assinatura_normalizada": "index.ts(N,N): error ts2322: type 'string' is not assignable to type 'number'. index.ts(N,N): error ts2339: property 'ta"
     },
     {
       "arquivo": "unittest_import.log",
       "veredito": "abstain",
-      "assinatura_normalizada": "e ====================================================================== error: test_import (test_x.t.test_import) -----"
+      "assinatura_normalizada": "modulenotfounderror: no module named 'modulo_que_nao_existe' e ========================================================="
     },
     {
       "arquivo": "unittest_import_wt2.log",
       "veredito": "abstain",
-      "assinatura_normalizada": "e ====================================================================== error: test_import (test_x.t.test_import) -----"
+      "assinatura_normalizada": "modulenotfounderror: no module named 'modulo_que_nao_existe' e ========================================================="
     }
   ],
   "pares": {

@@ -128,13 +128,13 @@ class Ledger:
         versao = self._banco.versao_da_regra()
         return versao is None or versao < Assinatura.VERSAO
 
-    def reindexar(self, simular=False):
+    def reindexar(self, simular=False, forcar=False):
         from erratum.reindex import Reindexador
 
         reindexador = self._reindexador
         if reindexador is None:
             reindexador = Reindexador(self._banco)
-        return reindexador.rodar(simular=simular)
+        return reindexador.rodar(simular=simular, forcar=forcar)
 
     def _ts(self):
         return self._relogio().isoformat(timespec="microseconds")

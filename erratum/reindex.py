@@ -14,16 +14,28 @@ class ResultadoDeReindex:
     correcoes_alteradas: int
     simulado: bool
     versao: int
+    divisoes: tuple = ()
+
+
+class DivisaoComCorrecao(Exception):
+    """Assinatura antiga com correção que a regra nova divide: a minoria perderia a correção."""
+
+    def __init__(self, divisoes):
+        super().__init__(f"{len(divisoes)} assinatura(s) com correcao se dividem")
+        self.divisoes = divisoes
 
 
 class Reindexador:
     def __init__(self, banco):
         self._banco = banco
 
-    def rodar(self, simular=False):
+    def rodar(self, simular=False, forcar=False):
         with self._banco.transacao() as con:
             antes = self._distintas(con)
-            erros = list(con.execute("SELECT id, signature, text FROM errors"))
+            # ORDER BY id: empate no most_common do --forcar fica deterministico
+            erros = list(
+                con.execute("SELECT id, signature, text FROM errors ORDER BY id")
+            )
             fixes = list(
                 con.execute("SELECT id, signature, import_key FROM fixes")
             )
@@ -33,7 +45,24 @@ class Reindexador:
                     "SELECT src, text FROM ledger_fts WHERE src LIKE 'seed:%'"
                 )
             }
-            mapa = self._mapa_de_erros(erros)
+            por_antiga = self._por_antiga(erros)
+            mapa = {
+                antiga: Counter(novas).most_common(1)[0][0]
+                for antiga, novas in por_antiga.items()
+            }
+            divisoes = tuple(
+                (antiga, tuple(sorted(set(por_antiga[antiga]))))
+                for antiga in sorted(
+                    {
+                        f["signature"]
+                        for f in fixes
+                        if not self._semente_com_texto(f, fts_semente)
+                    }
+                )
+                if len(set(por_antiga.get(antiga, ()))) > 1
+            )
+            if divisoes and not simular and not forcar:
+                raise DivisaoComCorrecao(divisoes)
             novas_erros = []
             erros_alterados = 0
             for e in erros:
@@ -75,6 +104,7 @@ class Reindexador:
                 correcoes_alteradas=correcoes_alteradas,
                 simulado=simular,
                 versao=Assinatura.VERSAO,
+                divisoes=divisoes,
             )
 
     def _distintas(self, con):
@@ -84,16 +114,19 @@ class Reindexador:
         )
         return len(list(linhas))
 
-    def _mapa_de_erros(self, erros):
+    def _por_antiga(self, erros):
         por_antiga = {}
         for e in erros:
             por_antiga.setdefault(e["signature"], []).append(
                 Assinatura(e["text"]).valor
             )
-        return {
-            antiga: Counter(novas).most_common(1)[0][0]
-            for antiga, novas in por_antiga.items()
-        }
+        return por_antiga
+
+    def _semente_com_texto(self, fix, fts_semente):
+        chave = fix["import_key"] or ""
+        return chave.startswith("semente:") and bool(
+            fts_semente.get(chave.split(":", 1)[-1])
+        )
 
     def _nova_da_correcao(self, fix, fts_semente, mapa):
         chave = fix["import_key"] or ""

@@ -871,9 +871,22 @@ class ComandoReindex(Comando):
 
     def configurar(self, parser):
         parser.add_argument("--dry-run", action="store_true")
+        parser.add_argument("--forcar", action="store_true")
 
     def executar(self, args, ledger):
-        r = ledger.reindexar(simular=args.dry_run)
+        from erratum.reindex import DivisaoComCorrecao
+        try:
+            r = ledger.reindexar(simular=args.dry_run, forcar=args.forcar)
+        except DivisaoComCorrecao as e:
+            if args.json:
+                self._escrever_json({"divisoes": e.divisoes, "abortado": True})
+            else:
+                self._escrever_divisoes(e.divisoes)
+                self._saida.write(t(
+                    "aborted: a fix would stay only with the majority; rerun with --forcar\n",
+                    "abortado: a correcao ficaria so com a maioria; rode com --forcar\n",
+                ))
+            return 1
         if args.json:
             self._escrever_json(asdict(r))
             return 0
@@ -882,7 +895,17 @@ class ComandoReindex(Comando):
             t("reindex%s: %d -> %d signatures\n", "reindex%s: %d -> %d assinaturas\n")
             % (extra, r.antes, r.depois)
         )
+        self._escrever_divisoes(r.divisoes)
         return 0
+
+    def _escrever_divisoes(self, divisoes):
+        for antiga, novas in divisoes:
+            self._saida.write(
+                t("fixed signature splits in %d: %s\n", "assinatura com correcao se divide em %d: %s\n")
+                % (len(novas), antiga)
+            )
+            for nova in novas:
+                self._saida.write("  -> %s\n" % nova)
 
 
 class ComandoImport(Comando):
